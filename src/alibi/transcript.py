@@ -58,6 +58,8 @@ class ToolCall:
     tool_use_id: str
     tool_name: str
     tool_input: dict[str, Any] = field(hash=False)
+    # Working directory the agent was running in when it made the call.
+    cwd: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -152,7 +154,9 @@ def load_transcript(path: str | Path) -> list[Event]:
                 continue
             if kind == "assistant" and block.get("type") == "tool_use":
                 tool_names[block["id"]] = block["name"]
-                events.append(ToolCall(ts, block["id"], block["name"], block.get("input") or {}))
+                events.append(
+                    ToolCall(ts, block["id"], block["name"], block.get("input") or {}, record.get("cwd"))
+                )
             elif kind == "user" and block.get("type") == "tool_result":
                 tool_use_id = block["tool_use_id"]
                 events.append(

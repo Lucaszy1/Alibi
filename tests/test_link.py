@@ -1,5 +1,6 @@
 """Linker tests: synthetic cases built from real command-line shapes, plus a real-data run."""
 
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -51,7 +52,9 @@ def bash_wrapper(command: str) -> str:
         "eval '" + command.replace("'", "'\"'\"'") + "' < /dev/null && pwd -P >| "
         "/c/Users/user/AppData/Local/Temp/claude-3774-cwd"
     )
-    escaped = script.replace("\\", "\\\\").replace('"', '\\"')
+    # CommandLineToArgvW quoting: only backslashes before a quote (or the closing quote) double.
+    escaped = re.sub(r'(\\*)"', lambda m: m.group(1) * 2 + '\\"', script)
+    escaped = re.sub(r"(\\+)$", lambda m: m.group(1) * 2, escaped)
     return f'"{BASH}" -c "{escaped}"'
 
 
