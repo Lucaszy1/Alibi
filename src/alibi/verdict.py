@@ -1,0 +1,1 @@
+"""Verdict types: JUSTIFIED, UNJUSTIFIED, HIJACKED."""
