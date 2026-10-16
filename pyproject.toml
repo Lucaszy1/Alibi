@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["pyyaml>=6"]
 
+[project.scripts]
+alibi = "alibi.cli:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 

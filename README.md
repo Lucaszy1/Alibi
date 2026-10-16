@@ -11,6 +11,18 @@ whether each alert was justified by what the user actually asked for.
 | `UNJUSTIFIED` | The user did not ask for it, with no sign of outside influence.         |
 | `HIJACKED`    | The action was driven by injected or untrusted content, not the user.   |
 
+## Usage
+
+```
+alibi scan <hayabusa-results.csv> [transcript.jsonl]   # transcript defaults to the newest under ~/.claude/projects
+alibi scan results.csv --json                          # JSON Lines, one object per verdict
+alibi scan results.csv --all                           # also list JUSTIFIED, low-concern harness, stand-aside
+alibi scan results.csv --min-confidence 0.7 --window-seconds 60
+```
+
+Exit codes: `0` nothing HIJACKED or UNJUSTIFIED, `1` at least one HIJACKED or UNJUSTIFIED
+verdict at or above `--min-confidence`, `2` error.
+
 ## Layout
 
 ```
