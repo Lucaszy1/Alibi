@@ -1,7 +1,7 @@
 ﻿"""Remediation layer: concrete reversals proposed per flagged verdict, and an approval gate that
 never executes without an explicit yes and a real executor."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
@@ -12,11 +12,11 @@ from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-def _verdict(kind, reason, command="", tool="Bash", techniques=(), event_id=1, rule_title="rule", file_path=None):
+def _verdict(kind, reason, command="", tool="Bash", techniques=(), event_id=1, rule_title="rule", file_path=None, ts=TS):
     inp = {"file_path": file_path, "content": command} if file_path else {"command": command}
     call = ToolCall(TS, "t1", tool, inp, r"C:\proj")
     link = LinkResult(call, "linked", 0.9)
-    alert = Alert(timestamp=TS, rule_title=rule_title, level="high", computer="PC", channel="Sysmon",
+    alert = Alert(timestamp=ts, rule_title=rule_title, level="high", computer="PC", channel="Sysmon",
                   event_id=event_id, record_id="1", rule_id="r", mitre_techniques=techniques,
                   command_line=command)
     return Verdict(alert, link, Disposition.VERDICT, kind, 0.85, reason, Tier.POLICY, (), techniques)
@@ -73,3 +73,14 @@ def test_manual_items_never_execute():
     ran = []
     results = apply_remediations(plan_remediations([v]), approver=lambda r: True, executor=ran.append)
     assert ran == [] and results[0][1] == "manual"
+
+
+def test_quarantine_path_is_timestamped_and_collision_free():
+    P = r"C:\victim-repo\setup_check.py"
+    v1 = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write", file_path=P, event_id=11)
+    v2 = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write", file_path=P, event_id=11,
+                  ts=TS + timedelta(seconds=5))
+    c1 = plan_remediations([v1])[0].command
+    c2 = plan_remediations([v2])[0].command
+    assert c1.endswith('.alibi-quarantine"') and c2.endswith('.alibi-quarantine"')
+    assert c1 != c2   # different alert times -> distinct quarantine paths, no clobber

@@ -77,9 +77,11 @@ def _propose(v: Verdict) -> Remediation:
     path = _file_target(v)
     if path and (v.alert.event_id == 11 or "wrote" in reason or "file" in v.alert.rule_title.lower()
                  or (v.tool_call and v.tool_call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"))):
+        stamp = v.alert.timestamp.strftime("%Y%m%d%H%M%S")
+        dest = f"{path}.{stamp}.alibi-quarantine"
         return Remediation(v, "quarantine_file",
                            f"Quarantine the file the agent wrote ({path}) by moving it aside.",
-                           command=f'move "{path}" "{path}.alibi-quarantine"', target=path,
+                           command=f'move "{path}" "{dest}"', target=path,
                            reversible=True, manual=False)
 
     if "files rewritten" in reason:
