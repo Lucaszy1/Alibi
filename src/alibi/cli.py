@@ -27,7 +27,7 @@ from alibi.alerts import load_alerts
 from alibi.judge import Judge
 from alibi.link import DEFAULT_WINDOW_SECONDS
 from alibi.transcript import ToolCall, load_transcript
-from alibi.verdict import Concern, Disposition, Verdict, VerdictKind
+from alibi.verdict import Concern, Disposition, Tier, Verdict, VerdictKind
 
 SUMMARY_ORDER = ("HIJACKED", "UNJUSTIFIED", "UNKNOWN", "HARNESS", "JUSTIFIED", "STAND_ASIDE")
 # Lower sorts first in the listing.
@@ -197,32 +197,40 @@ def render_human(verdicts: list[Verdict], shown: list[Verdict], out: TextIO, sty
 # Entry point
 
 
+def _add_common_args(sp) -> None:
+    sp.add_argument("results", type=Path, help="Hayabusa results CSV")
+    sp.add_argument("transcript", type=Path, nargs="?",
+                    help="session transcript (.jsonl); default: the most recent under ~/.claude/projects")
+    sp.add_argument("--json", action="store_true", help="one JSON object per verdict (JSON Lines)")
+    sp.add_argument("--all", action="store_true", help="include JUSTIFIED, low-concern harness, and stand-aside")
+    sp.add_argument("--min-confidence", type=float, default=0.0, metavar="X",
+                    help="only list verdicts with confidence >= X (summary still counts all)")
+    sp.add_argument("--window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, metavar="N",
+                    help=f"attribution window for calls with no result or run in background (default {DEFAULT_WINDOW_SECONDS:g})")
+    sp.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+    sp.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
+                    help="Ollama host for the model tier (default http://127.0.0.1:11434)")
+    sp.add_argument("--max-model-calls", type=int, default=50, metavar="N",
+                    help="cap model adjudications (default 50)")
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="alibi", description="Judge endpoint alerts against an AI agent session.",
         epilog="exit codes: 0 clean, 1 HIJACKED or UNJUSTIFIED found, 2 error",
     )
     sub = parser.add_subparsers(dest="command", required=True)
-    scan = sub.add_parser(
-        "scan", help="judge every alert in a Hayabusa results CSV",
-        epilog="exit codes: 0 clean, 1 HIJACKED or UNJUSTIFIED at or above --min-confidence, 2 error",
-    )
-    scan.add_argument("results", type=Path, help="Hayabusa results CSV")
-    scan.add_argument("transcript", type=Path, nargs="?",
-                      help="session transcript (.jsonl); default: the most recent under ~/.claude/projects")
-    scan.add_argument("--json", action="store_true", help="one JSON object per verdict (JSON Lines)")
-    scan.add_argument("--all", action="store_true", help="include JUSTIFIED, low-concern harness, and stand-aside")
-    scan.add_argument("--min-confidence", type=float, default=0.0, metavar="X",
-                      help="only list verdicts with confidence >= X (summary still counts all)")
-    scan.add_argument("--window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, metavar="N",
-                      help=f"attribution window for calls with no result or run in background (default {DEFAULT_WINDOW_SECONDS:g})")
-    scan.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+
+    scan = sub.add_parser("scan", help="judge every alert in a Hayabusa results CSV (fast, deterministic)")
+    _add_common_args(scan)
     scan.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
-                      help="adjudicate UNKNOWN verdicts with a local Ollama model (default llama3.1:8b)")
-    scan.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
-                      help="Ollama host for --model (default http://127.0.0.1:11434)")
-    scan.add_argument("--max-model-calls", type=int, default=50, metavar="N",
-                      help="cap model adjudications per scan (default 50)")
+                      help="also adjudicate UNKNOWN verdicts inline with a local Ollama model")
+
+    adj = sub.add_parser("adjudicate",
+                         help="background pass: resolve the UNKNOWN pile with a local model, report only what it decides")
+    _add_common_args(adj)
+    adj.add_argument("--model", default="qwen2.5:7b", metavar="NAME",
+                     help="local Ollama model for adjudication (default qwen2.5:7b)")
     return parser
 
 
@@ -262,7 +270,10 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host),
                                       max_calls=args.max_model_calls)
     verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
-    selected = verdicts if args.all else [v for v in verdicts if needs_attention(v)]
+    if args.command == "adjudicate":
+        selected = [v for v in verdicts if v.tier is Tier.MODEL]
+    else:
+        selected = verdicts if args.all else [v for v in verdicts if needs_attention(v)]
     shown = [v for v in selected if v.confidence >= args.min_confidence]
     shown.sort(key=lambda v: (_RANK.get(v.label, 9), -v.confidence, v.alert.timestamp))
 
