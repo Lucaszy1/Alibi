@@ -34,6 +34,10 @@ class Remediation:
         return not self.manual and self.command is not None
 
 
+_CRED_CMD_RE = re.compile(r"(cmdkey|vaultcmd|secretsdump|mimikatz|lsass|/\.aws/credentials|/\.ssh/id_|\.netrc|security find-generic-password)", re.I)
+_EXFIL_CMD_RE = re.compile(r"\b(curl|wget|invoke-webrequest|iwr|ncat|scp)\b", re.I)
+
+
 def _default_os() -> str:
     return "windows" if sys.platform.startswith("win") else "posix"
 
@@ -95,7 +99,10 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
                            "Restore the rewritten files from version control (git restore) or a backup.",
                            command="git restore .", reversible=True, manual=False)
 
-    if bases & _CRED_EXFIL:
+    is_cred = bool(_CRED_CMD_RE.search(cmd))
+    is_exfil = ("targets host" in reason or "exfiltrat" in reason
+                or (bool(_EXFIL_CMD_RE.search(cmd)) and ("http" in cmd.lower() or "--data" in cmd.lower())))
+    if (bases & _CRED_EXFIL) or is_cred or is_exfil:
         return Remediation(v, "rotate_credential",
                            "Rotate or revoke any credential the agent could have read or sent. Alibi cannot do this for you.",
                            manual=True)
@@ -104,13 +111,24 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
 
 
 def plan_remediations(verdicts, target_os: str | None = None) -> list:
-    """A proposed reversal for every HIJACKED / UNJUSTIFIED verdict. Pure, no side effects.
+    """A proposed reversal for each HIJACKED / UNJUSTIFIED verdict, de-duplicated. Pure, no side effects.
 
     target_os ("windows" or "posix") picks the shell form of generated commands; it defaults to
-    the platform running Alibi, since that is where --apply would execute them."""
+    the platform running Alibi, since that is where --apply would execute them. Verdicts that map
+    to the same reversal (one action flagged by several overlapping rules) collapse to one proposal."""
     os_name = target_os or _default_os()
-    return [_propose(v, os_name) for v in verdicts
-            if v.disposition is Disposition.VERDICT and v.verdict in _FLAGGED]
+    seen = set()
+    out = []
+    for v in verdicts:
+        if v.disposition is not Disposition.VERDICT or v.verdict not in _FLAGGED:
+            continue
+        rem = _propose(v, os_name)
+        key = (rem.action, rem.command, rem.target)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(rem)
+    return out
 
 
 def apply_remediations(remediations, approver: Callable, executor: Callable | None = None) -> list:
