@@ -283,6 +283,16 @@ POLICY_CATEGORIES = (
          "shadow copy", "vssadmin", "cipher", "mass delete"),
     ),
     PolicyCategory(
+        "collection / capture", PolicyLevel.STRICT, ("T1056", "T1113", "T1115", "T1114", "T1125", "T1123"),
+        ("keylog", "keystroke", "screenshot", "screen capture", "screen record", "record screen",
+         "clipboard", "webcam", "microphone", "capture input"),
+    ),
+    PolicyCategory(
+        "command and control", PolicyLevel.ESCALATE, ("T1090", "T1105", "T1572", "T1219", "T1102"),
+        ("proxy", "tunnel", "beacon", "reverse shell", "ngrok", "certutil", "bitsadmin",
+         "remote access", "download tool", "c2"),
+    ),
+    PolicyCategory(
         "stealth / proxy execution", PolicyLevel.ESCALATE, ("T1055", "T1218", "T1027", "T1036", "T1140", "T1564"),
         ("inject", "obfuscat", "encode", "base64", "rundll32", "regsvr32", "mshta", "hidden", "masquerad"),
     ),
