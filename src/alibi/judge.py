@@ -351,8 +351,21 @@ def trace_provenance(
     covered = {t for t in targets if _covered(t, user_paths, user_norm, roots)}
     uncovered = set(targets) - covered
 
+    # For file-writing tools, also trace targets embedded in the WRITTEN CONTENT, not just
+    # the path. A hijacked agent can drop a payload to disk; if what it wrote names a host or
+    # URL the user never asked for and that came from untrusted input, that is a hijack even
+    # though the file sits in the workspace. These only ever raise an untrusted-content hit,
+    # never generic UNKNOWN noise, so ordinary code that merely contains a URL stays clean.
+    content_targets: set[Target] = set()
+    if call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        written = " ".join(str(call.tool_input.get(k, "")) for k in ("content", "new_string", "new_str", "new_source"))
+        content_targets = {
+            t for t in extract_targets(written)
+            if t.kind is not TargetKind.PATH and not _covered(t, user_paths, user_norm, roots)
+        }
+
     hits = []
-    for target in uncovered:
+    for target in uncovered | content_targets:
         for result in untrusted:
             raw = result.content
             idx = _appears_in(target, _norm_text(raw))
@@ -579,7 +592,7 @@ class Judge:
                      [self._prompt_evidence(prompt, phrase), call_ev])
             return v, ctx(v)
         if prov.untrusted_hits or prov.uncovered:
-            first = sorted(prov.uncovered, key=str)[0]
+            first = sorted(prov.uncovered, key=str)[0] if prov.uncovered else prov.untrusted_hits[0].target
             source = " (also seen in untrusted output, likely discovery)" if prov.untrusted_hits else ""
             evidence = [call_ev] + [
                 Evidence(EvidenceSource.UNTRUSTED_RESULT, h.excerpt, h.result.timestamp, h.result.tool_use_id, h.tool_name)
