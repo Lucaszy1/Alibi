@@ -3,6 +3,7 @@ only after a y/N confirm. subprocess.run and input are stubbed, so no real comma
 
 import builtins
 import io
+import json
 import subprocess
 
 from alibi.alerts import Alert
@@ -17,8 +18,9 @@ TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 class _Args:
-    def __init__(self, apply):
+    def __init__(self, apply, json=False):
         self.apply = apply
+        self.json = json
 
 
 def _sched_verdict():
@@ -63,3 +65,20 @@ def test_nothing_flagged_is_clean(monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     code = _remediate([], _Args(True), out, err)
     assert code == 0 and "nothing flagged" in err.getvalue()
+
+
+def test_json_dry_run_emits_proposal_objects():
+    out, err = io.StringIO(), io.StringIO()
+    code = _remediate([_sched_verdict()], _Args(False, json=True), out, err)
+    rows = [json.loads(l) for l in out.getvalue().splitlines() if l.strip()]
+    assert code == 1 and rows and rows[0]["action"] == "delete_scheduled_task"
+    assert rows[0]["manual"] is False and "Dry run" not in out.getvalue()
+
+
+def test_json_apply_includes_status(monkeypatch):
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(builtins, "input", lambda *a, **k: "y")
+    out, err = io.StringIO(), io.StringIO()
+    _remediate([_sched_verdict()], _Args(True, json=True), out, err)
+    rows = [json.loads(l) for l in out.getvalue().splitlines() if l.strip()]
+    assert rows and rows[0]["status"] == "applied"

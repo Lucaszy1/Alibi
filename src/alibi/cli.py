@@ -242,31 +242,54 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _remediation_to_json(r, status=None):
+    d = {
+        "action": r.action,
+        "description": r.description,
+        "command": r.command,
+        "target": r.target,
+        "reversible": r.reversible,
+        "manual": r.manual,
+        "verdict": r.verdict.label,
+        "confidence": round(r.verdict.confidence, 3),
+        "rule_title": r.verdict.alert.rule_title,
+        "timestamp": r.verdict.alert.timestamp.isoformat(),
+    }
+    if status is not None:
+        d["status"] = status
+    return d
+
+
 def _remediate(verdicts, args, out, err) -> int:
     """Propose a reversal per flagged verdict; with --apply, run each only after a y/N confirm.
 
-    Without --apply nothing executes: it lists proposals and returns. The real executor
-    (subprocess) is reached only when the per-action approver returns yes."""
+    Without --apply nothing executes. --json emits one proposal object per line (JSON Lines)
+    instead of the human listing. The real executor (subprocess) runs only when the per-action
+    approver returns yes."""
     from alibi.remediate import apply_remediations, plan_remediations
 
     rems = plan_remediations(verdicts)
     if not rems:
-        print("alibi: nothing flagged; no remediations to propose.", file=err)
+        if not args.json:
+            print("alibi: nothing flagged; no remediations to propose.", file=err)
         return 0
 
-    for i, r in enumerate(rems, 1):
-        out.write(f"[{i}] {r.action}: {r.description}\n")
-        if r.command:
-            out.write(f"      run: {r.command}" + ("   (reversible)" if r.reversible else "") + "\n")
-        else:
-            out.write("      (manual: Alibi cannot do this for you)\n")
-
     if not args.apply:
-        out.write(f"\n{len(rems)} proposal(s). Dry run; re-run with --apply to act (each asks you to confirm first).\n")
+        if args.json:
+            for r in rems:
+                out.write(json.dumps(_remediation_to_json(r)) + "\n")
+        else:
+            for i, r in enumerate(rems, 1):
+                out.write(f"[{i}] {r.action}: {r.description}\n")
+                if r.command:
+                    out.write(f"      run: {r.command}" + ("   (reversible)" if r.reversible else "") + "\n")
+                else:
+                    out.write("      (manual: Alibi cannot do this for you)\n")
+            out.write(f"\n{len(rems)} proposal(s). Dry run; re-run with --apply to act (each asks you to confirm first).\n")
         return 1
 
     def approver(r) -> bool:
-        out.write(f"\nApply [{r.action}] {r.description}\n  run: {r.command}\n")
+        err.write(f"\nApply [{r.action}] {r.description}\n  run: {r.command}\n")
         try:
             ans = input("  apply this? [y/N] ")
         except EOFError:
@@ -275,12 +298,17 @@ def _remediate(verdicts, args, out, err) -> int:
 
     def executor(r) -> None:
         import subprocess
-        out.write(f"  running: {r.command}\n")
+        err.write(f"  running: {r.command}\n")
         subprocess.run(r.command, shell=True, check=False)
 
-    out.write("\n")
-    for r, status in apply_remediations(rems, approver, executor):
-        out.write(f"  - {r.action}: {status}\n")
+    results = apply_remediations(rems, approver, executor)
+    if args.json:
+        for r, status in results:
+            out.write(json.dumps(_remediation_to_json(r, status)) + "\n")
+    else:
+        out.write("\n")
+        for r, status in results:
+            out.write(f"  - {r.action}: {status}\n")
     return 1
 
 
