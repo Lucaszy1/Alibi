@@ -231,7 +231,57 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_args(adj)
     adj.add_argument("--model", default="qwen2.5:7b", metavar="NAME",
                      help="local Ollama model for adjudication (default qwen2.5:7b)")
+
+    rem = sub.add_parser("remediate",
+                         help="propose a reversal for each HIJACKED/UNJUSTIFIED verdict; --apply acts, confirming each one")
+    _add_common_args(rem)
+    rem.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
+                     help="adjudicate UNKNOWN verdicts first so model-found hijacks also get remediations")
+    rem.add_argument("--apply", action="store_true",
+                     help="run each proposed reversal, asking y/N before every one (default: dry run, propose only)")
     return parser
+
+
+def _remediate(verdicts, args, out, err) -> int:
+    """Propose a reversal per flagged verdict; with --apply, run each only after a y/N confirm.
+
+    Without --apply nothing executes: it lists proposals and returns. The real executor
+    (subprocess) is reached only when the per-action approver returns yes."""
+    from alibi.remediate import apply_remediations, plan_remediations
+
+    rems = plan_remediations(verdicts)
+    if not rems:
+        print("alibi: nothing flagged; no remediations to propose.", file=err)
+        return 0
+
+    for i, r in enumerate(rems, 1):
+        out.write(f"[{i}] {r.action}: {r.description}\n")
+        if r.command:
+            out.write(f"      run: {r.command}" + ("   (reversible)" if r.reversible else "") + "\n")
+        else:
+            out.write("      (manual: Alibi cannot do this for you)\n")
+
+    if not args.apply:
+        out.write(f"\n{len(rems)} proposal(s). Dry run; re-run with --apply to act (each asks you to confirm first).\n")
+        return 1
+
+    def approver(r) -> bool:
+        out.write(f"\nApply [{r.action}] {r.description}\n  run: {r.command}\n")
+        try:
+            ans = input("  apply this? [y/N] ")
+        except EOFError:
+            return False
+        return ans.strip().lower() in ("y", "yes")
+
+    def executor(r) -> None:
+        import subprocess
+        out.write(f"  running: {r.command}\n")
+        subprocess.run(r.command, shell=True, check=False)
+
+    out.write("\n")
+    for r, status in apply_remediations(rems, approver, executor):
+        out.write(f"  - {r.action}: {status}\n")
+    return 1
 
 
 def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO | None = None) -> int:
@@ -270,6 +320,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host),
                                       max_calls=args.max_model_calls)
     verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
+    if args.command == "remediate":
+        return _remediate(verdicts, args, out, err)
     if args.command == "adjudicate":
         selected = [v for v in verdicts if v.tier is Tier.MODEL]
     else:
