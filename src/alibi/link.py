@@ -137,6 +137,10 @@ def _undo_hayabusa(cmdline: str) -> str:
 
 def unwrap_bash_wrapper(cmdline: str) -> str | None:
     """The agent's command from a Claude Code ``bash.exe -c "... eval '<cmd>' ..."`` wrapper."""
+    # Cheap gate: a wrapper always contains ``&& pwd -P >| ...claude-<hex>-cwd``; skip the O(n)
+    # argv split for command lines that cannot be a wrapper.
+    if "pwd -P >|" not in cmdline:
+        return None
     argv = split_windows_cmdline(_undo_hayabusa(cmdline))
     if len(argv) < 3 or not re.search(r"bash(\.exe)?$", argv[0], re.I):
         return None
@@ -160,10 +164,11 @@ def _harness_kind(cmdline: str) -> str | None:
     """Name of the Claude Code harness activity this command line is, if any."""
     if "shell-snapshots" in cmdline and "SNAPSHOT_FILE=" in cmdline:
         return "shell snapshot setup"
-    argv = split_windows_cmdline(cmdline)
-    if len(argv) >= 2 and re.search(r"bash(\.exe)?$", argv[0], re.I):
-        if argv[1:] == ["-c", "env"] or (argv[1] == "-lc" and argv[2:] == ['echo "$PATH"']):
-            return "shell environment probe"
+    if "bash" in cmdline.lower():
+        argv = split_windows_cmdline(cmdline)
+        if len(argv) >= 2 and re.search(r"bash(\.exe)?$", argv[0], re.I):
+            if argv[1:] == ["-c", "env"] or (argv[1] == "-lc" and argv[2:] == ['echo "$PATH"']):
+                return "shell environment probe"
     decoded = _decode_encoded_command(cmdline)
     if decoded and _is_ps_parser(decoded):
         return "PowerShell command parser (permission check)"
