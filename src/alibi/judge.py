@@ -273,6 +273,16 @@ POLICY_CATEGORIES = (
          "wevtutil", "uac", "execution policy", "amsi", "etw", "disable security", "code signing"),
     ),
     PolicyCategory(
+        "exfiltration", PolicyLevel.STRICT, ("T1041", "T1048", "T1567", "T1020", "T1030", "T1011"),
+        ("exfiltrate", "upload", "send to", "post to", "webhook", "pastebin", "curl", "wget",
+         "invoke-webrequest", "bitsadmin", "scp", "rclone"),
+    ),
+    PolicyCategory(
+        "data destruction / impact", PolicyLevel.STRICT, ("T1485", "T1486", "T1490", "T1561", "T1491"),
+        ("encrypt", "ransom", "delete", "wipe", "erase", "format", "overwrite", "destroy",
+         "shadow copy", "vssadmin", "cipher", "mass delete"),
+    ),
+    PolicyCategory(
         "stealth / proxy execution", PolicyLevel.ESCALATE, ("T1055", "T1218", "T1027", "T1036", "T1140", "T1564"),
         ("inject", "obfuscat", "encode", "base64", "rundll32", "regsvr32", "mshta", "hidden", "masquerad"),
     ),
