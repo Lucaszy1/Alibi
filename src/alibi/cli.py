@@ -341,8 +341,12 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         print(f"alibi: could not read input: {type(exc).__name__}: {exc}", file=err)
         return 2
     calls = [e for e in events if isinstance(e, ToolCall)]
-    if alerts and calls and (calls[-1].timestamp < alerts[0].timestamp or calls[0].timestamp > alerts[-1].timestamp):
-        print(f"alibi: warning: {transcript.name} does not overlap the alerts in time; nothing can link.", file=err)
+    if alerts and calls:
+        amin = min(a.timestamp for a in alerts)
+        amax = max(a.timestamp for a in alerts)
+        w = args.window_seconds
+        if (amin - calls[-1].timestamp).total_seconds() > w or (calls[0].timestamp - amax).total_seconds() > w:
+            print(f"alibi: warning: {transcript.name} does not overlap the alerts in time; nothing can link.", file=err)
 
     model_tier = None
     if args.model:
