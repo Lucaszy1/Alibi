@@ -33,6 +33,8 @@ from alibi.alerts import Alert
 from alibi.transcript import Event, ToolCall, ToolResult
 
 DEFAULT_WINDOW_SECONDS = 60.0
+# A deferred mechanism (scheduled task, service) can fire long after it is created.
+DEFERRED_WINDOW = timedelta(hours=24)
 # Records are written slightly before the process starts, and results slightly after it ends.
 CLOCK_SKEW = timedelta(seconds=2)
 MIN_CONFIDENCE = 0.5
@@ -286,6 +288,58 @@ def _score_command(alert_cmd: str, image: str | None, call_cmd: str) -> tuple[fl
     return 0.0, ""
 
 
+_DEFERRED_CREATORS = (
+    ("scheduled task",
+     re.compile(r"\bschtasks(?:\.exe)?\b.*?/create\b", re.I),
+     re.compile(r"/tr\s+(?P<p>.+?)(?:\s+/(?:sc|mo|tn|st|sd|ed|ru|rp|rl|it|du|et|f|k|z|v1|xml)\b|$)", re.I | re.S)),
+    ("service",
+     re.compile(r"\bsc(?:\.exe)?\s+create\b", re.I),
+     re.compile(r"binpath=\s*(?P<p>.+?)\s*(?:\s[a-z]+=|$)", re.I | re.S)),
+    ("service",
+     re.compile(r"\bNew-Service\b", re.I),
+     re.compile(r"-BinaryPathName\s+(?P<p>.+?)(?:\s+-\w|$)", re.I | re.S)),
+    ("scheduled task",
+     re.compile(r"\bRegister-ScheduledTask\b", re.I),
+     re.compile(r"-(?:Execute|Argument)\s+(?P<p>.+?)(?:\s+-\w|$)", re.I | re.S)),
+)
+
+
+def _deferred_payload(cmd: str) -> tuple[str | None, str | None]:
+    """If a command creates a deferred mechanism, return (kind, the payload it embeds)."""
+    for kind, creator_re, payload_re in _DEFERRED_CREATORS:
+        if creator_re.search(cmd):
+            m = payload_re.search(cmd)
+            if m:
+                return kind, m.group("p").strip().strip("\"'")
+    return None, None
+
+
+def _match_deferred(alert_cmd: str, spans: list[_Span], ts: datetime) -> LinkResult | None:
+    """Link an orphan process to a deferred task/service the agent created in a tool call.
+
+    The visible agent action is the creation command; the payload it embedded (e.g. schtasks
+    ``/tr``) runs later under the OS scheduler, with no agent ancestry and outside any tool-call
+    window. Causation is recovered by matching the orphan command to that embedded payload.
+    """
+    alert_norm = normalize(_undo_hayabusa(alert_cmd))
+    if len(alert_norm) < 6:
+        return None
+    hit = None
+    for span in spans:
+        if span.call.tool_name not in SHELL_TOOLS:
+            continue
+        _, payload = _deferred_payload(str(span.call.tool_input.get("command", "")))
+        if not payload:
+            continue
+        if not (span.call.timestamp - CLOCK_SKEW <= ts <= span.call.timestamp + DEFERRED_WINDOW):
+            continue
+        if alert_norm in normalize(payload) and (hit is None or span.call.timestamp > hit.timestamp):
+            hit = span.call
+    if hit is None:
+        return None
+    return LinkResult(hit, "payload of a scheduled task/service the agent created (deferred execution)", 0.85)
+
+
 def _alert_path(alert: Alert) -> str | None:
     for key in ("TargetFilename", "Path", "TgtFile"):
         value = alert.fields.get(key)
@@ -360,6 +414,10 @@ def _link_direct(alert: Alert, spans: list[_Span]) -> LinkResult:
                 best = (score, reason, span)
         if best[2] is not None and best[0] >= MIN_CONFIDENCE:
             return LinkResult(best[2].call, best[1], round(best[0], 3))
+
+        deferred = _match_deferred(cmd, spans, alert.timestamp)
+        if deferred is not None:
+            return deferred
 
         if unwrap_bash_wrapper(cmd) is not None:
             return LinkResult(None, "Claude Code bash wrapper, but no matching tool call in this transcript", 0.9)
