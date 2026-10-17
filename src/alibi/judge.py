@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import posixpath
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import Iterable, Protocol
 
@@ -459,6 +459,35 @@ class ModelTier(Protocol):
 # The judge
 
 
+_BULK_KEYWORDS = (
+    "refactor", "rename", "reformat", "format", "lint", "prettier", "black", "isort", "migrat",
+    "rewrite", "codemod", "find and replace", "sed ", "mass ", "bulk", "every file", "all files",
+    "across the repo", "whole repo", "entire repo", "clean up all", "normalize", "apply fixes",
+)
+_BULK_THRESHOLD = 10
+_BULK_WINDOW = timedelta(seconds=120)
+
+
+def _is_file_write(v):
+    if v.disposition is not Disposition.VERDICT:
+        return False
+    call = v.tool_call
+    if call is not None and call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        return True
+    return v.alert.event_id == 11 or "file created" in v.alert.rule_title.lower()
+
+
+def _densest_cluster(writes, window):
+    best = []
+    for i in range(len(writes)):
+        k = i
+        while k < len(writes) and writes[k].alert.timestamp - writes[i].alert.timestamp <= window:
+            k += 1
+        if k - i > len(best):
+            best = writes[i:k]
+    return best
+
+
 @dataclass
 class Judge:
     events: list[Event]
@@ -473,7 +502,31 @@ class Judge:
 
     def judge_all(self, alerts: list[Alert]) -> list[Verdict]:
         links = link_alerts(alerts, self.events, self.window_seconds)
-        return [self.judge(a, link) for a, link in zip(alerts, links)]
+        verdicts = [self.judge(a, link) for a, link in zip(alerts, links)]
+        return self._flag_bulk_rewrites(verdicts)
+
+    def _flag_bulk_rewrites(self, verdicts: list[Verdict]) -> list[Verdict]:
+        """A burst of file rewrites the user never licensed (ransomware-shaped) is suspicious even
+        when no single write is. If the request names no bulk operation (refactor, rename, format,
+        ...), flag the densest cluster of agent file-writes as UNJUSTIFIED."""
+        writes = sorted((v for v in verdicts if _is_file_write(v)), key=lambda v: v.alert.timestamp)
+        if len(writes) < _BULK_THRESHOLD:
+            return verdicts
+        user_text = " ".join(e.text for e in self.events if isinstance(e, UserPrompt)).lower()
+        if any(k in user_text for k in _BULK_KEYWORDS):
+            return verdicts
+        cluster = _densest_cluster(writes, _BULK_WINDOW)
+        if len(cluster) < _BULK_THRESHOLD:
+            return verdicts
+        flagged = {id(v) for v in cluster}
+        span = (cluster[-1].alert.timestamp - cluster[0].alert.timestamp).total_seconds()
+        reason = (f"{len(cluster)} files rewritten in {span:.0f}s, a mass file change the request "
+                  f"never licensed (no refactor, rename or format asked for).")
+        return [
+            replace(v, verdict=VerdictKind.UNJUSTIFIED, reason=reason, tier=Tier.POLICY, confidence=0.8)
+            if id(v) in flagged and v.verdict in (VerdictKind.JUSTIFIED, VerdictKind.UNKNOWN) else v
+            for v in verdicts
+        ]
 
     def judge(self, alert: Alert, link: LinkResult | None = None) -> Verdict:
         if link is None:
