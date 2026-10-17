@@ -217,6 +217,10 @@ def _build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, metavar="N",
                       help=f"attribution window for calls with no result or run in background (default {DEFAULT_WINDOW_SECONDS:g})")
     scan.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+    scan.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
+                      help="adjudicate UNKNOWN verdicts with a local Ollama model (default llama3.1:8b)")
+    scan.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
+                      help="Ollama host for --model (default http://127.0.0.1:11434)")
     return parser
 
 
@@ -250,7 +254,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
     if alerts and calls and (calls[-1].timestamp < alerts[0].timestamp or calls[0].timestamp > alerts[-1].timestamp):
         print(f"alibi: warning: {transcript.name} does not overlap the alerts in time; nothing can link.", file=err)
 
-    verdicts = Judge(events, window_seconds=args.window_seconds).judge_all(alerts)
+    model_tier = None
+    if args.model:
+        from alibi.model_tier import CachingModelTier, OllamaBackend
+        model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host))
+    verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
     selected = verdicts if args.all else [v for v in verdicts if needs_attention(v)]
     shown = [v for v in selected if v.confidence >= args.min_confidence]
     shown.sort(key=lambda v: (_RANK.get(v.label, 9), -v.confidence, v.alert.timestamp))
