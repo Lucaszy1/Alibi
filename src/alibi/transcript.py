@@ -131,12 +131,67 @@ def _read_records(path: Path) -> Iterable[dict[str, Any]]:
             raise
 
 
+_TOOL_ALIASES = {
+    "shell": "Bash", "bash": "Bash", "sh": "Bash", "terminal": "Bash", "run": "Bash",
+    "powershell": "PowerShell", "pwsh": "PowerShell",
+    "write": "Write", "write_file": "Write", "create_file": "Write",
+    "edit": "Edit", "edit_file": "Edit", "str_replace": "Edit",
+    "read": "Read", "read_file": "Read", "cat": "Read",
+}
+
+
+def _canon_tool(name: str) -> str:
+    return _TOOL_ALIASES.get(name.strip().lower(), name)
+
+
+def _looks_generic(record: dict) -> bool:
+    """A neutral cross-agent record is keyed by role/kind, not by Claude Code's ``type``."""
+    return "type" not in record and ("role" in record or "kind" in record)
+
+
+def _parse_generic(records) -> list[Event]:
+    """Parse a neutral cross-agent JSONL transcript so any agent can feed Alibi.
+
+    One JSON object per line: a prompt ``{ts, role:"user", text}``, a tool call
+    ``{ts, role:"assistant", tool, id, input}``, or a result ``{ts, role:"tool", id, output,
+    trusted?}``. ``trusted`` defaults to false, so unrecognized content is treated as untrusted.
+    """
+    events: list[Event] = []
+    for r in records:
+        role = (r.get("role") or r.get("kind") or "").lower()
+        raw_ts = r.get("ts") or r.get("timestamp")
+        if not raw_ts:
+            continue
+        ts = _parse_timestamp(raw_ts)
+        if role in ("user", "human") and isinstance(r.get("text") or r.get("content"), str):
+            events.append(UserPrompt(ts, r.get("text") or r.get("content")))
+        elif (r.get("tool") or r.get("tool_name")) and role in ("assistant", "agent", "tool_call", "action"):
+            name = _canon_tool(str(r.get("tool") or r.get("tool_name")))
+            tid = str(r.get("id") or r.get("tool_use_id") or len(events))
+            events.append(ToolCall(ts, tid, name, r.get("input") or r.get("args") or {}, r.get("cwd")))
+        elif role in ("tool", "tool_result", "observation", "result"):
+            tid = str(r.get("id") or r.get("tool_use_id") or "")
+            trusted = bool(r.get("trusted", False))
+            content = _flatten_content(r.get("output") if r.get("output") is not None else r.get("content"))
+            events.append(ToolResult(ts, tid, content, SourceKind.TRUSTED if trusted else SourceKind.UNTRUSTED))
+    events.sort(key=lambda e: e.timestamp)
+    return events
+
+
 def load_transcript(path: str | Path) -> list[Event]:
-    """Parse a transcript into UserPrompt / ToolCall / ToolResult events, ordered by time."""
+    """Parse a transcript into UserPrompt / ToolCall / ToolResult events, ordered by time.
+
+    Auto-detects the format: Claude Code's own JSONL (records keyed by ``type``), or a neutral
+    cross-agent JSONL (records keyed by ``role``/``kind``) so any agent can feed Alibi.
+    """
+    records = list(_read_records(Path(path)))
+    if records and _looks_generic(records[0]):
+        return _parse_generic(records)
+
     events: list[Event] = []
     tool_names: dict[str, str] = {}
 
-    for record in _read_records(Path(path)):
+    for record in records:
         kind = record.get("type")
         if kind not in ("user", "assistant") or "timestamp" not in record:
             continue
