@@ -8,6 +8,7 @@ are always side-effect free."""
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from typing import Callable
 
@@ -31,6 +32,10 @@ class Remediation:
     @property
     def automatic(self) -> bool:
         return not self.manual and self.command is not None
+
+
+def _default_os() -> str:
+    return "windows" if sys.platform.startswith("win") else "posix"
 
 
 def _command(v: Verdict) -> str:
@@ -62,7 +67,7 @@ def _schtask_name(cmd: str):
     return m.group(1).strip() if m else None
 
 
-def _propose(v: Verdict) -> Remediation:
+def _propose(v: Verdict, os_name: str) -> Remediation:
     cmd = _command(v)
     reason = v.reason.lower()
     bases = _bases(v)
@@ -79,9 +84,10 @@ def _propose(v: Verdict) -> Remediation:
                  or (v.tool_call and v.tool_call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"))):
         stamp = v.alert.timestamp.strftime("%Y%m%d%H%M%S")
         dest = f"{path}.{stamp}.alibi-quarantine"
+        mv = "move" if os_name == "windows" else "mv"
         return Remediation(v, "quarantine_file",
                            f"Quarantine the file the agent wrote ({path}) by moving it aside.",
-                           command=f'move "{path}" "{dest}"', target=path,
+                           command=f'{mv} "{path}" "{dest}"', target=path,
                            reversible=True, manual=False)
 
     if "files rewritten" in reason:
@@ -97,9 +103,13 @@ def _propose(v: Verdict) -> Remediation:
     return Remediation(v, "manual_review", "No safe automatic reversal; review this action manually.", manual=True)
 
 
-def plan_remediations(verdicts) -> list:
-    """A proposed reversal for every HIJACKED / UNJUSTIFIED verdict. Pure, no side effects."""
-    return [_propose(v) for v in verdicts
+def plan_remediations(verdicts, target_os: str | None = None) -> list:
+    """A proposed reversal for every HIJACKED / UNJUSTIFIED verdict. Pure, no side effects.
+
+    target_os ("windows" or "posix") picks the shell form of generated commands; it defaults to
+    the platform running Alibi, since that is where --apply would execute them."""
+    os_name = target_os or _default_os()
+    return [_propose(v, os_name) for v in verdicts
             if v.disposition is Disposition.VERDICT and v.verdict in _FLAGGED]
 
 

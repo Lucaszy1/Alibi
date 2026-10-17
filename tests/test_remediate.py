@@ -84,3 +84,12 @@ def test_quarantine_path_is_timestamped_and_collision_free():
     c2 = plan_remediations([v2])[0].command
     assert c1.endswith('.alibi-quarantine"') and c2.endswith('.alibi-quarantine"')
     assert c1 != c2   # different alert times -> distinct quarantine paths, no clobber
+
+
+def test_quarantine_command_is_os_specific():
+    P = r"C:\victim-repo\setup_check.py"
+    v = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write", file_path=P, event_id=11)
+    win = plan_remediations([v], target_os="windows")[0].command
+    posix = plan_remediations([v], target_os="posix")[0].command
+    assert win.startswith('move "') and posix.startswith('mv "')
+    assert win.endswith('.alibi-quarantine"') and posix.endswith('.alibi-quarantine"')

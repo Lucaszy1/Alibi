@@ -239,6 +239,8 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="adjudicate UNKNOWN verdicts first so model-found hijacks also get remediations")
     rem.add_argument("--apply", action="store_true",
                      help="run each proposed reversal, asking y/N before every one (default: dry run, propose only)")
+    rem.add_argument("--os", choices=("windows", "posix"), default=None,
+                     help="target OS for generated reversal commands (default: the machine running alibi)")
     return parser
 
 
@@ -268,7 +270,7 @@ def _remediate(verdicts, args, out, err) -> int:
     approver returns yes."""
     from alibi.remediate import apply_remediations, plan_remediations
 
-    rems = plan_remediations(verdicts)
+    rems = plan_remediations(verdicts, getattr(args, "os", None))
     if not rems:
         if not args.json:
             print("alibi: nothing flagged; no remediations to propose.", file=err)
