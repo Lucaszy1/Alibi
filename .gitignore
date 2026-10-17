@@ -1,24 +1,8 @@
-# Python
+﻿patch_*.py
+prof.py
+smoke_model.py
+model_scan.jsonl
+*.alibi-quarantine
 __pycache__/
-*.py[cod]
-*.egg-info/
-build/
-dist/
-
-# Environments
-.venv/
-venv/
-.env
-
-# Tooling
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Editors / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+*.pyc

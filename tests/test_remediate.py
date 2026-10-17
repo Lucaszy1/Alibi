@@ -1,0 +1,75 @@
+﻿"""Remediation layer: concrete reversals proposed per flagged verdict, and an approval gate that
+never executes without an explicit yes and a real executor."""
+
+from datetime import datetime, timezone
+
+from alibi.alerts import Alert
+from alibi.link import LinkResult
+from alibi.remediate import apply_remediations, plan_remediations
+from alibi.transcript import ToolCall
+from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
+
+TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+def _verdict(kind, reason, command="", tool="Bash", techniques=(), event_id=1, rule_title="rule", file_path=None):
+    inp = {"file_path": file_path, "content": command} if file_path else {"command": command}
+    call = ToolCall(TS, "t1", tool, inp, r"C:\proj")
+    link = LinkResult(call, "linked", 0.9)
+    alert = Alert(timestamp=TS, rule_title=rule_title, level="high", computer="PC", channel="Sysmon",
+                  event_id=event_id, record_id="1", rule_id="r", mitre_techniques=techniques,
+                  command_line=command)
+    return Verdict(alert, link, Disposition.VERDICT, kind, 0.85, reason, Tier.POLICY, (), techniques)
+
+
+def test_scheduled_task_proposes_deletion():
+    v = _verdict(VerdictKind.HIJACKED, "payload of a scheduled task",
+                 command='schtasks /create /tn WinHealthCheck /sc once /tr "cmd /c cmdkey /list"')
+    r = plan_remediations([v])[0]
+    assert r.action == "delete_scheduled_task" and "WinHealthCheck" in r.command and r.automatic
+
+
+def test_dropped_file_proposes_quarantine():
+    v = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write",
+                 file_path=r"C:\victim-repo\setup_check.py", event_id=11)
+    r = plan_remediations([v])[0]
+    assert r.action == "quarantine_file" and r.reversible and r.target.endswith("setup_check.py")
+
+
+def test_credential_exfil_is_manual():
+    v = _verdict(VerdictKind.UNJUSTIFIED, "credential access the user never asked for",
+                 command="cmdkey /list", techniques=("T1555",))
+    r = plan_remediations([v])[0]
+    assert r.action == "rotate_credential" and r.manual and not r.automatic
+
+
+def test_only_flagged_verdicts_get_proposals():
+    v = _verdict(VerdictKind.JUSTIFIED, "the user asked for this", command="pytest")
+    assert plan_remediations([v]) == []
+
+
+def test_gate_never_runs_without_approval():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command="schtasks /create /tn T /tr x")
+    ran = []
+    results = apply_remediations(plan_remediations([v]), approver=lambda r: False, executor=ran.append)
+    assert ran == [] and results[0][1] == "declined"
+
+
+def test_gate_runs_only_approved_with_executor():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command="schtasks /create /tn T /tr x")
+    ran = []
+    results = apply_remediations(plan_remediations([v]), approver=lambda r: True, executor=ran.append)
+    assert len(ran) == 1 and results[0][1] == "applied"
+
+
+def test_approved_without_executor_is_dry_run():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command="schtasks /create /tn T /tr x")
+    results = apply_remediations(plan_remediations([v]), approver=lambda r: True)
+    assert results[0][1] == "approved-dryrun"
+
+
+def test_manual_items_never_execute():
+    v = _verdict(VerdictKind.UNJUSTIFIED, "credential access", command="cmdkey /list", techniques=("T1003",))
+    ran = []
+    results = apply_remediations(plan_remediations([v]), approver=lambda r: True, executor=ran.append)
+    assert ran == [] and results[0][1] == "manual"
