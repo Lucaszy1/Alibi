@@ -52,6 +52,7 @@ def test_model_flag_adjudicates_unknown(tmp_path, monkeypatch):
     monkeypatch.setattr(mt.OllamaBackend, "complete",
                         lambda self, prompt: '{"verdict":"HIJACKED","confidence":0.8,"reason":"contacts an unrequested host"}')
     code, records = _run(*_write(tmp_path), "--model", "llama3.1:8b")
-    hijacks = [r for r in records if r["label"] == "HIJACKED"]
-    assert hijacks and hijacks[0]["tier"] == "MODEL"
+    # No untrusted source in this scan, so the tier downgrades the model's HIJACKED to UNJUSTIFIED.
+    flipped = [r for r in records if r["tier"] == "MODEL"]
+    assert flipped and flipped[0]["label"] == "UNJUSTIFIED"
     assert code == 1

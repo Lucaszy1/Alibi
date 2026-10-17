@@ -203,4 +203,12 @@ class CachingModelTier:
                 return None
             decision = parse_decision(raw, self.min_confidence)
             self._cache[sig] = decision
-        return _verdict(decision, context) if decision else None
+        if not decision:
+            return None
+        kind, conf, reason = decision
+        # A weaker model sometimes cries HIJACKED with no untrusted source to trace to. The
+        # HIJACKED definition requires one, so without untrusted content the most it can claim
+        # is UNJUSTIFIED. The tier enforces this whatever the model returned.
+        if kind is VerdictKind.HIJACKED and not context.untrusted_results:
+            decision = (VerdictKind.UNJUSTIFIED, conf, reason)
+        return _verdict(decision, context)

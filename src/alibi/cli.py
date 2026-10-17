@@ -221,6 +221,8 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="adjudicate UNKNOWN verdicts with a local Ollama model (default llama3.1:8b)")
     scan.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
                       help="Ollama host for --model (default http://127.0.0.1:11434)")
+    scan.add_argument("--max-model-calls", type=int, default=50, metavar="N",
+                      help="cap model adjudications per scan (default 50)")
     return parser
 
 
@@ -257,7 +259,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
     model_tier = None
     if args.model:
         from alibi.model_tier import CachingModelTier, OllamaBackend
-        model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host))
+        model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host),
+                                      max_calls=args.max_model_calls)
     verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
     selected = verdicts if args.all else [v for v in verdicts if needs_attention(v)]
     shown = [v for v in selected if v.confidence >= args.min_confidence]
