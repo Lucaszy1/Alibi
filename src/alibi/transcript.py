@@ -115,7 +115,12 @@ def _is_human_prompt(record: dict[str, Any]) -> bool:
     return isinstance(record.get("message", {}).get("content"), str)
 
 
+MAX_TRANSCRIPT_BYTES = 100 * 1024 * 1024
+
+
 def _read_records(path: Path) -> Iterable[dict[str, Any]]:
+    if path.stat().st_size > MAX_TRANSCRIPT_BYTES:
+        raise ValueError(f"transcript too large: {path.stat().st_size} bytes exceeds {MAX_TRANSCRIPT_BYTES}")
     with path.open(encoding="utf-8") as f:
         lines = f.readlines()
     for i, line in enumerate(lines):

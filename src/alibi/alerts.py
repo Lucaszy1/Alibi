@@ -219,6 +219,9 @@ def _build_alert(row: dict[str, str], rule_tags: dict[str, list[str]]) -> Alert:
     )
 
 
+MAX_ALERTS_BYTES = 200 * 1024 * 1024
+
+
 def load_alerts(path: str | Path, rules_dir: str | Path | None = None) -> list[Alert]:
     """Parse a Hayabusa results CSV into Alerts sorted by timestamp.
 
@@ -226,6 +229,8 @@ def load_alerts(path: str | Path, rules_dir: str | Path | None = None) -> list[A
     to a ``rules`` directory next to the CSV, if one exists.
     """
     path = Path(path)
+    if path.stat().st_size > MAX_ALERTS_BYTES:
+        raise ValueError(f"alerts CSV too large: {path.stat().st_size} bytes exceeds {MAX_ALERTS_BYTES}")
     # utf-8-sig: Hayabusa may write a BOM.
     with path.open(encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
