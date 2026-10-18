@@ -28,8 +28,7 @@ Detection
 
 Remediation
 - Blocking needs admin/sudo to apply (inherent): hostnames route to 0.0.0.0 in the hosts file, bare
-  IPs get a firewall rule (netsh on Windows, iptables/ip6tables on posix). DONE. Remaining: a macOS
-  pf adapter (posix currently emits iptables); fix path: add pf when a macOS feed needs it.
+  IPs get a firewall rule (netsh on Windows, iptables/ip6tables on Linux, a pfctl anchor on macOS). DONE.
 - Reversals carry an argv vector built from validated parts, so an executor can run them shell-free
   (shell=False); only genuinely shell-shaped reversals (hosts redirect, sc stop&delete chain) keep a
   shell command and are flagged needs_shell. DONE.
@@ -75,8 +74,7 @@ Privacy
 - M12 explainability: DONE (incident report artifact, Mermaid provenance graph, and secret
   redaction in reports are all shipped and tested).
 - M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
-  WMI handling, rollback bundle + undo, argv-style shell-free execution). Remaining deferred: macOS
-  pf adapter.
+  WMI handling, rollback bundle + undo, argv-style shell-free execution, and a macOS pfctl IP block).
 - M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
   tested; the MCP server is not yet built).
 - M15 benchmark and evaluation: DONE for the deterministic judge (labeled paired corpus, confusion

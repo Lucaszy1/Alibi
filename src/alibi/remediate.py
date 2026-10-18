@@ -61,7 +61,11 @@ def _plist_path(cmd):
 
 
 def _default_os() -> str:
-    return "windows" if sys.platform.startswith("win") else "posix"
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "posix"
 
 
 def _command(v: Verdict) -> str:
@@ -257,6 +261,9 @@ def _extra(v, os_name):
             blk = f'netsh advfirewall firewall add rule name="Alibi block {host}" dir=out action=block remoteip={host}'
             argv = ("netsh", "advfirewall", "firewall", "add", "rule",
                     f"name=Alibi block {host}", "dir=out", "action=block", f"remoteip={host}")
+        elif os_name == "macos":
+            blk = f'echo "block drop out quick to {host}" | sudo pfctl -a com.alibi/block -f - && sudo pfctl -e'
+            argv = None  # pf needs a shell pipe; validated IP interpolated, so still safe
         else:
             tool = "ip6tables" if _is_ipv6(host) else "iptables"
             blk = f"sudo {tool} -A OUTPUT -d {host} -j DROP"
@@ -395,6 +402,10 @@ def _inverse(rem, os_name):
                             False,
                             argv=("netsh", "advfirewall", "firewall", "delete", "rule",
                                   f"name=Alibi block {rem.target}"))
+        if "pfctl" in cmd:
+            return UndoStep("unblock_ip",
+                            f"Flush the pf anchor blocking {rem.target}.",
+                            "sudo pfctl -a com.alibi/block -F rules", False, argv=None)
         tool = "ip6tables" if "ip6tables" in cmd else "iptables"
         return UndoStep("unblock_ip",
                         f"Remove the firewall DROP rule for {rem.target}.",

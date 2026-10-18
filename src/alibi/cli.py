@@ -244,7 +244,7 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="adjudicate UNKNOWN verdicts first so model-found hijacks also get remediations")
     rem.add_argument("--apply", action="store_true",
                      help="run each proposed reversal, asking y/N before every one (default: dry run, propose only)")
-    rem.add_argument("--os", choices=("windows", "posix"), default=None,
+    rem.add_argument("--os", choices=("windows", "posix", "macos"), default=None,
                      help="target OS for generated reversal commands (default: the machine running alibi)")
     rem.add_argument("--undo-out", type=Path, default=None, metavar="FILE",
                      help="on --apply, write a rollback bundle here to revert later (default alibi-undo.json)")
