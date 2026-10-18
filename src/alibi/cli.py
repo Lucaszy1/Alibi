@@ -269,6 +269,8 @@ def _build_parser() -> argparse.ArgumentParser:
     hist.add_argument("state", type=Path, help="state file written by --state")
     hist.add_argument("--json", action="store_true", help="emit each run record as JSON Lines")
 
+    sub.add_parser("mcp", help="run Alibi as a stdio MCP server exposing the assess guardrail")
+
     rep = sub.add_parser("report", help="Markdown incident report with provenance and proposed reversals")
     _add_common_args(rep)
     rep.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
@@ -549,6 +551,10 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         return _undo(args, out, err)
     if args.command == "history":
         return _history(args, out, err)
+    if args.command == "mcp":
+        from alibi.mcp_server import serve
+        serve()
+        return 0
 
     if not args.results.is_file():
         print(f"alibi: results file not found: {args.results}", file=err)

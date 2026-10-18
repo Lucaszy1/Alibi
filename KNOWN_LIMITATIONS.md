@@ -75,8 +75,8 @@ Privacy
   redaction in reports are all shipped and tested).
 - M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
   WMI handling, rollback bundle + undo, argv-style shell-free execution, and a macOS pfctl IP block).
-- M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
-  tested; the MCP server is not yet built).
+- M14 MCP server: DONE. A dependency-free stdio JSON-RPC MCP server (alibi mcp) exposes the inline
+  assess guardrail as an `assess` tool (allow / warn / block), alongside the shipped Claude Code hook.
 - M15 benchmark and evaluation: DONE for the deterministic judge (labeled paired corpus, confusion
   matrix + precision/recall/F1, operational detection view, tier ablations, naive baselines, and an
   `alibi bench` CLI writing benchmark/REPORT.md). Remaining deferred: model-tier evaluation and
