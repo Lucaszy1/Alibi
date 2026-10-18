@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(215 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(259 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -23,13 +23,20 @@ Detection
 - Alert-to-call linking is time-window heuristic; clock skew or background processes can mislink.
 
 Remediation
-- block_host blocks by hostname via the hosts file; a bare IP is not meaningfully blocked, and the
-  command needs admin/sudo to run. Fix path: firewall-rule reversal for IPs (M13).
-- Reversals execute via shell with validated or withheld targets; argv-style execution is a planned
-  defense-in-depth hardening.
-- Persistence reversals cover schtasks/systemd/launchd/cron. Windows Run-key, WMI, sc.exe services,
-  and startup-folder persistence have no reversal yet. Fix path: M13.
+- Blocking needs admin/sudo to apply (inherent): hostnames route to 0.0.0.0 in the hosts file, bare
+  IPs get a firewall rule (netsh on Windows, iptables/ip6tables on posix). DONE. Remaining: a macOS
+  pf adapter (posix currently emits iptables); fix path: add pf when a macOS feed needs it.
+- Reversals carry an argv vector built from validated parts, so an executor can run them shell-free
+  (shell=False); only genuinely shell-shaped reversals (hosts redirect, sc stop&delete chain) keep a
+  shell command and are flagged needs_shell. DONE.
+- Persistence reversals: schtasks/systemd/launchd and now Windows Run-key / sc.exe service /
+  startup-folder are automatic; cron and WMI event-subscription are manual by design (no single safe
+  command removes a WMI filter+consumer+binding together). DONE.
 - Quoted multi-word task or service names are safely withheld to manual review, not auto-parsed.
+- Undo: Alibi rolls back its own reversible containment (restore a quarantined file, remove a
+  firewall rule) via a serializable bundle, and never auto-undoes a persistence deletion (that would
+  reinstate the attacker's autostart). DONE. Remaining: surface the undo bundle through the CLI; fix
+  path: a `remediate --undo` path that reads a saved bundle.
 
 Model, confidence, performance
 - Model tier needs local Ollama and its accuracy is not yet measured (M15).
@@ -58,7 +65,9 @@ Privacy
 - M-An unexplained-action anomaly tier (attack-agnostic catch for no-source novel attacks).
 - M12 explainability: DONE (incident report artifact, Mermaid provenance graph, and secret
   redaction in reports are all shipped and tested).
-- M13 remediation depth (rollback bundle, undo, containment, IP / registry / WMI reversals).
+- M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
+  WMI handling, rollback bundle + undo, argv-style shell-free execution). Remaining deferred: macOS
+  pf adapter; CLI surfacing of the undo bundle.
 - M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
   tested; the MCP server is not yet built).
 - M15 benchmark and evaluation (corpus, metrics, ablations, baselines, confidence calibration).
