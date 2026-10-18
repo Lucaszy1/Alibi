@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 from alibi.verdict import Disposition, Verdict, VerdictKind
@@ -141,6 +141,41 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
     return Remediation(v, "manual_review", "No safe automatic reversal; review this action manually.", manual=True)
 
 
+_SAFE_PATH_RE = re.compile(r"^[A-Za-z0-9 _.\-:()\\/~]+$")
+_SAFE_HOST_RE = re.compile(r"^[A-Za-z0-9.\-]+$")
+_SAFE_UNIT_RE = re.compile(r"^[A-Za-z0-9@._\-]+$")
+_SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9 _.\-\\/]+$")
+
+
+def _target_is_safe(rem) -> bool:
+    if rem.command and ("\n" in rem.command or "\r" in rem.command):
+        return False
+    t = rem.target or ""
+    if rem.action in ("quarantine_file", "unload_launch_agent"):
+        return bool(_SAFE_PATH_RE.match(t))
+    if rem.action == "delete_scheduled_task":
+        return bool(_SAFE_TASK_RE.match(t))
+    if rem.action == "disable_service":
+        return bool(_SAFE_UNIT_RE.match(t))
+    if rem.action == "block_host":
+        return bool(_SAFE_HOST_RE.match(t))
+    return True
+
+
+def _harden(rem):
+    """Fail safe: never auto-run a reversal whose target carries shell-unsafe characters.
+
+    An attacker controls file paths, hosts, service units and task names inside the session, so an
+    interpolated command could otherwise be a code-execution path under --apply. An unsafe target
+    is downgraded to a manual review with no command, so Alibi runs nothing it cannot vouch for."""
+    if rem.automatic and not _target_is_safe(rem):
+        return replace(rem, action="manual_review", command=None,
+                       description="Generated reversal withheld: the target has unusual or unsafe "
+                                   "characters. Inspect and handle this manually.",
+                       reversible=False, manual=True)
+    return rem
+
+
 def plan_remediations(verdicts, target_os: str | None = None) -> list:
     """A proposed reversal for each HIJACKED / UNJUSTIFIED verdict, de-duplicated. Pure, no side effects.
 
@@ -153,7 +188,7 @@ def plan_remediations(verdicts, target_os: str | None = None) -> list:
     for v in verdicts:
         if v.disposition is not Disposition.VERDICT or v.verdict not in _FLAGGED:
             continue
-        rem = _propose(v, os_name)
+        rem = _harden(_propose(v, os_name))
         key = (rem.action, rem.command, rem.target)
         if key in seen:
             continue

