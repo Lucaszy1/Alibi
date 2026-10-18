@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(164 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(215 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -43,8 +43,13 @@ Privacy
 
 ## B. Deferred milestones (on the roadmap, not built)
 
-- M10 broader ingestion (EVTX, Windows Event Log, auditd, osquery, Elastic/Splunk; explicit
-  web-fetch, MCP, and subagent injection sources).
+- M10 broader ingestion: DONE for the neutral layer. A documented neutral JSON/JSONL alert feed is
+  auto-detected and parsed (alerts.py), so any SIEM or EDR that can emit JSON feeds Alibi without a
+  bespoke parser; source classification is default-untrusted, so web-fetch, MCP, and subagent
+  results are already treated as attacker-controllable (locked by test_source_classification.py).
+  DEFERRED: native binary/log parsers (EVTX, Windows Event Log, auditd, osquery, Elastic/Splunk
+  native) are a convenience layer on top of that neutral contract, not a correctness gap. Fix path:
+  per-format adapters that normalize into the neutral shape, added when a real feed needs one.
 - M11 allowlists (false-positive controls).
 - M-An unexplained-action anomaly tier (attack-agnostic catch for no-source novel attacks).
 - M12 explainability (incident report artifact, provenance graph, secret redaction).
