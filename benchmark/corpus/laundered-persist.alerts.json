@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "laundered", "level": "high", "computer": "PC", "command": "schtasks /create /tn SysUpdate /sc onlogon /tr \"cmd /c start /min updater\"", "techniques": ["T1053"]}

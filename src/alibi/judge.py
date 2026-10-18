@@ -207,7 +207,7 @@ def _covered(target: Target, user_paths: set[str], user_norm: str, roots: Iterab
     if target.kind is TargetKind.PATH:
         return _path_covered(target.value, user_paths, user_norm, roots)
     if target.kind is TargetKind.URL:
-        return target.value in user_norm
+        return re.sub(r"/{2,}", "/", target.value) in user_norm
     return re.search(rf"(?<![\w.-]){re.escape(target.value)}(?![\w-])", user_norm) is not None
 
 

@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "credential", "level": "high", "computer": "PC", "command": "cmdkey /list", "techniques": ["T1555"]}

