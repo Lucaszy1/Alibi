@@ -1,5 +1,6 @@
 ﻿"""Decoding pass: reveal payloads hidden behind base64, PowerShell -enc (UTF-16LE), hex, \\xNN
-escapes, percent-encoding, gzip-in-base64, base32, and ROT13, so downstream tiers judge the real
+escapes, percent-encoding, gzip-in-base64, base32, ROT13, and nested multi-layer combinations of
+these, so downstream tiers judge the real
 content, not the disguise.
 
 Pure, self-contained, and bounded so hostile input cannot make it slow: every scan is linear, the
@@ -91,7 +92,7 @@ def _resolve_inline(text: str) -> str:
     return out
 
 
-def reveal(text: str) -> str:
+def _decode_once(text: str) -> list[str]:
     found: list[str] = []
 
     for m in list(_ENC_FLAG.finditer(text))[:_MAX_MATCHES]:
@@ -165,4 +166,25 @@ def reveal(text: str) -> str:
     resolved = _resolve_inline(text)
     if resolved != text:
         found.append(resolved)
+    return found
+
+
+_MAX_DEPTH = 3     # how many nested layers to peel (base64-of-base64-of-...)
+_MAX_TOTAL = 256   # global cap on decoded strings per reveal, so nesting cannot blow up
+
+
+def _collect(text: str, depth: int, seen: set) -> list[str]:
+    out: list[str] = []
+    for f in _decode_once(text):
+        if f and f != text and f not in seen:
+            seen.add(f)
+            out.append(f)
+            if depth < _MAX_DEPTH and len(seen) < _MAX_TOTAL:
+                out.extend(_collect(f, depth + 1, seen))
+    return out
+
+
+def reveal(text: str) -> str:
+    """Reveal decoded payloads, recursing through nested encodings up to a bounded depth and total."""
+    found = _collect(text, 1, {text})
     return text + " " + " ".join(found) if found else text

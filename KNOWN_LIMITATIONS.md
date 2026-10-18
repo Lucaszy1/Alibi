@@ -18,7 +18,9 @@ Detection
   gzip-in-base64, base32, and ROT13 (noisy transforms gated on a real indicator). Intentionally
   omitted: brute-force single-byte XOR (a 256-key sweep over attacker-controlled blobs is a DoS
   vector for little gain) and certutil/bitsadmin decode-to-file (handled by taint's via-file path).
-  Still open: nested multi-layer encodings and .NET FromBase64 without -enc. Fix path: extend decode.py.
+  Nested multi-layer encodings are now decoded recursively (bounded depth and total), and .NET
+  FromBase64String payloads are caught by the generic base64 scan. Still open: keyed or stateful
+  transforms (e.g. AES). Fix path: extend decode.py.
 - Policy tier keys off EDR MITRE tags, not command content, so an untagged technique is missed by
   policy (provenance/taint may still catch). Fix path: optional decoded-content policy scan.
 - Target extraction uses a fixed TLD allowlist, so unusual or newer TLDs may not extract as bare
