@@ -48,7 +48,7 @@ _IP_RE = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|
 # A TLD allowlist keeps Python dotted names (alibi.alerts, yaml.safe_load) from reading as hosts.
 _HOST_RE = re.compile(
     r"(?<![\w.@-])(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|me|info|biz|xyz|top|site|online|"
-    r"ru|cn|su|tk|cc|ws|us|uk|de|fr|eu|gov|edu|cloud|link|zip|onion)(?![\w-])",
+    r"ru|cn|su|tk|cc|ws|us|uk|de|fr|eu|gov|edu|cloud|link|zip|onion|nl|jp|kr|br|au|ca|ch|se|pl|cz|pt|gr|sg|hk|tw|za|mx|ar|cl|nz|ie|kz|ua|vn|ph|my|th|ng|ke|icu|cfd|sbs|cyou|bond|quest|pw|best)(?![\w-])",
     re.I,
 )
 _WIN_PATH_RE = re.compile(r"(?<![\w])[A-Za-z]:[\\/]+[^\s'\"<>|;&*?`]*")

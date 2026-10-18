@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(313 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(328 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -23,9 +23,11 @@ Detection
   transforms (e.g. AES). Fix path: extend decode.py.
 - Policy tier keys off EDR MITRE tags, not command content, so an untagged technique is missed by
   policy (provenance/taint may still catch). Fix path: optional decoded-content policy scan.
-- Target extraction uses a fixed TLD allowlist, so unusual or newer TLDs may not extract as bare
-  hosts (URLs always extract their host). Local files whose extension is also a gTLD (.sh/.zip/
-  .app) are no longer misread as hosts. Fix path for allowlist breadth: widen it as needed.
+- Target extraction uses a TLD allowlist, widened with common ccTLDs and abused newer gTLDs. It
+  stays an allowlist by design (so ordinary dotted words are not read as hosts; word-like TLDs such
+  as .to/.in/.it are deliberately excluded), and URLs always extract their host regardless of TLD, so
+  only a bare host on a very obscure TLD may still be missed. Local files whose extension is also a
+  gTLD (.sh/.zip/.app) are not misread as hosts.
 - Alert-to-call linking is time-window heuristic; clock skew or background processes can mislink.
 
 Remediation

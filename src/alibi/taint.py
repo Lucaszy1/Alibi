@@ -25,7 +25,7 @@ _URL = re.compile(r"https?://[^\s'\"<>|`)]+", re.I)
 _IP = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])")
 _HOST = re.compile(
     r"(?<![\w.@-])(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|me|info|biz|xyz|top|site|online|"
-    r"ru|cn|su|tk|cc|ws|us|uk|de|fr|eu|gov|edu|cloud|link|zip|onion)(?![\w-])",
+    r"ru|cn|su|tk|cc|ws|us|uk|de|fr|eu|gov|edu|cloud|link|zip|onion|nl|jp|kr|br|au|ca|ch|se|pl|cz|pt|gr|sg|hk|tw|za|mx|ar|cl|nz|ie|kz|ua|vn|ph|my|th|ng|ke|icu|cfd|sbs|cyou|bond|quest|pw|best)(?![\w-])",
     re.I,
 )
 _PATHISH = re.compile(r"(?:[A-Za-z]:\\|/|\./|~/|\.\\)[\w./\\-]{2,}")
