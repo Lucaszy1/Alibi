@@ -21,6 +21,7 @@ from typing import Iterable, Protocol
 
 from alibi.alerts import Alert
 from alibi.link import DEFAULT_WINDOW_SECONDS, LinkResult, Origin, link_alert, link_alerts
+from alibi.taint import trace_taint
 from alibi.transcript import Event, SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import (
     Concern,
@@ -636,6 +637,31 @@ class Judge:
                     [Evidence(EvidenceSource.UNTRUSTED_RESULT, h.excerpt, h.result.timestamp, h.result.tool_use_id, h.tool_name),
                      call_ev],
                 )
+                return v, ctx(v)
+
+        # Tier 2b: taint. No distinctive target of the action appeared in untrusted content, but
+        # the argument can still be derived from it: a decoded blob, or a file the agent wrote from
+        # untrusted input and then ran. Flag such a flow when the action is consequential (a strict
+        # sensitive category, or it executed a dropped file); plain benign base64 does not qualify.
+        if not prov.untrusted_hits:
+            taint = trace_taint(self.events, call)
+            if taint.tainted and (strict_unmet or taint.via_file):
+                ev = [call_ev]
+                hop = next((st for st in taint.path if st.wrote), None)
+                if hop is not None:
+                    ev.insert(0, Evidence(EvidenceSource.TOOL_CALL,
+                                          f"wrote {hop.wrote} from untrusted content, then it was run",
+                                          hop.call.timestamp, hop.call.tool_use_id, hop.call.tool_name))
+                if taint.source is not None:
+                    raw = taint.source.content
+                    i = raw.lower().find((taint.token or "").lower())
+                    snip = _excerpt(_clean(raw), _clean_index(raw, i)) if i >= 0 else _clean(raw)[: 2 * EXCERPT_RADIUS]
+                    ev.insert(0, Evidence(EvidenceSource.UNTRUSTED_RESULT, snip, taint.source.timestamp, taint.source.tool_use_id))
+                why = ("a file the agent wrote from untrusted content" if taint.via_file
+                       else f"untrusted content ({taint.token})")
+                v = make(VerdictKind.HIJACKED, 0.85 if taint.via_file else 0.8,
+                         f"The action is derived from {why}, which the user never introduced.",
+                         Tier.PROVENANCE, ev)
                 return v, ctx(v)
 
         # Tier 3: sensitive categories need the user to have asked for that kind of thing.
