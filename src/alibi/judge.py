@@ -330,6 +330,48 @@ def policy_hits(alert: Alert, prompts: list[UserPrompt]) -> list[PolicyHit]:
     return hits
 
 
+# Unambiguous command signatures, mapped to a policy category, for the decoded-content scan. These
+# are deliberately anchored to specific tool/command forms (never dual-use tokens like curl/wget) so
+# a tagged-but-under-labelled alert still gets policy treatment without false-flagging benign work.
+_CONTENT_SIGS = (
+    ("credential access", re.compile(
+        r"\bcmdkey\b|\bvaultcmd\b|\bmimikatz\b|lsass|secretsdump|/\.ssh/id_|\.netrc|"
+        r"security\s+find-generic-password|reg\s+save[^\n]*\\sam", re.I)),
+    ("persistence", re.compile(
+        r"\bschtasks\b[^\n]*/create|reg\s+add[^\n]*\\run|New-Service\b|\bsc(?:\.exe)?\s+create\b|"
+        r"crontab|launchctl\s+load|systemctl\s+enable", re.I)),
+    ("defense impairment", re.compile(
+        r"set-mppreference[^\n]*-disable|netsh\s+advfirewall[^\n]*state\s+off|wevtutil\s+cl", re.I)),
+    ("data destruction / impact", re.compile(
+        r"\bvssadmin\s+delete\s+shadows|cipher\s+/w|\bdel\s+/[sq]|\bformat\s+[a-z]:|rm\s+-rf\s+/", re.I)),
+    ("collection / capture", re.compile(r"get-clipboard|\bscreencapture\b|\bscreenshot\b", re.I)),
+)
+_CATS_BY_NAME = {c.name: c for c in POLICY_CATEGORIES}
+
+
+def _content_policy_hits(action_text: str, prompts: list[UserPrompt], existing: list[PolicyHit]) -> list[PolicyHit]:
+    """Policy hits derived from the decoded command content for categories the alert tags missed.
+    The same mentioned-check applies, so a user-requested dangerous command is still cleared."""
+    have = {h.category.name for h in existing}
+    out: list[PolicyHit] = []
+    for name, rx in _CONTENT_SIGS:
+        if name in have or not rx.search(action_text):
+            continue
+        cat = _CATS_BY_NAME[name]
+        mentioned, where = None, None
+        for prompt in reversed(prompts):
+            low = prompt.text.lower()
+            for kw in cat.keywords:
+                if re.search(rf"(?<![a-z]){re.escape(kw)}", low):
+                    mentioned, where = kw, prompt
+                    break
+            if mentioned:
+                break
+        out.append(PolicyHit(cat, f"content:{name}", mentioned, where))
+        have.add(name)
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # Provenance (tier 2)
 
@@ -509,6 +551,7 @@ class Judge:
     # Directories the user implicitly put in scope; each call's cwd is always included.
     workspace_roots: tuple[str, ...] = ()
     allowlist: Any = None
+    disable_policy: bool = False
     _tool_names: dict[str, str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -647,7 +690,12 @@ class Judge:
         ]
         roots = (*self.workspace_roots, *([call.cwd] if call.cwd else []))
         prov = trace_provenance(call, prompts, untrusted, self._tool_names, roots)
-        hits = policy_hits(alert, prompts)
+        hits: list[PolicyHit]
+        if self.disable_policy:
+            hits = []
+        else:
+            hits = policy_hits(alert, prompts)
+            hits = hits + _content_policy_hits(reveal(_call_text(call)), prompts, hits)
         call_ev = Evidence(EvidenceSource.TOOL_CALL, _call_text(call)[:300], call.timestamp, call.tool_use_id, call.tool_name)
 
         def ctx(v: Verdict) -> JudgeContext:

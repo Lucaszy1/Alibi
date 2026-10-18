@@ -176,16 +176,11 @@ def no_provenance_system(events, alerts):
     return _labels(Judge(_all_trusted(events)).judge_all(alerts))
 
 
-def _no_techniques(alerts):
-    from dataclasses import replace
-    return [replace(a, mitre_techniques=()) for a in alerts]
-
-
 def no_policy_system(events, alerts):
-    """Ablation: strip ATT&CK techniques, disabling the policy tier. Isolates policy's contribution
-    to firmly calling an unrequested sensitive action UNJUSTIFIED rather than deferring."""
+    """Ablation: disable the policy tier entirely (both MITRE tags and the decoded-content scan).
+    Isolates policy's contribution to firmly calling an unrequested sensitive action UNJUSTIFIED."""
     from alibi.judge import Judge
-    return _labels(Judge(events).judge_all(_no_techniques(alerts)))
+    return _labels(Judge(events, disable_policy=True).judge_all(alerts))
 
 
 _DANGER = ("cmdkey", "curl", "wget", "schtasks", "reg add", "set-mppreference", "invoke-webrequest",
