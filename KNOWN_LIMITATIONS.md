@@ -66,9 +66,10 @@ Privacy
   auto-detected and parsed (alerts.py), so any SIEM or EDR that can emit JSON feeds Alibi without a
   bespoke parser; source classification is default-untrusted, so web-fetch, MCP, and subagent
   results are already treated as attacker-controllable (locked by test_source_classification.py).
-  DEFERRED: native binary/log parsers (EVTX, Windows Event Log, auditd, osquery, Elastic/Splunk
-  native) are a convenience layer on top of that neutral contract, not a correctness gap. Fix path:
-  per-format adapters that normalize into the neutral shape, added when a real feed needs one.
+  Elastic ECS and Splunk JSON are normalized directly (nested/vendor field names mapped to the
+  neutral shape). DEFERRED: binary EVTX / Windows Event Log (needs a parser dependency), auditd
+  text, and osquery epoch-time feeds, each a convenience layer on the neutral contract, not a
+  correctness gap. Fix path: per-format adapters added when a real feed needs one.
 - M11 allowlists: DONE. A trusted --allow file downgrades a flagged verdict to JUSTIFIED
   (judge._apply_allowlist), keeping the original finding in the reason; tested.
 - M-An anomaly tier: DONE. A high-severity action with no external target and no tie to the

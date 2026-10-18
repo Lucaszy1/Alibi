@@ -199,32 +199,91 @@ def _parse_ts_any(value):
         return _parse_timestamp(s)
 
 
+# Field-name aliases so a neutral feed, Elastic ECS, or Splunk all map onto the same Alert. Nested
+# vendor keys (process.command_line, host.name, event.code) are reached by flattening to dotted keys.
+_NEUTRAL_ALIASES = {
+    "timestamp": ("timestamp", "ts", "@timestamp", "_time"),
+    "rule_title": ("rule", "rule_title", "rule.name", "signal.rule.name", "search_name"),
+    "level": ("level", "severity", "event.severity"),
+    "computer": ("computer", "host", "host.name", "hostname", "ComputerName", "winlog.computer_name"),
+    "channel": ("channel", "winlog.channel", "log.file.path", "source"),
+    "event_id": ("event_id", "event.code", "EventCode", "winlog.event_id"),
+    "record_id": ("record_id", "id", "event.id", "RecordID"),
+    "rule_id": ("rule_id", "rule.id", "signal.rule.id"),
+    "command_line": ("command", "command_line", "process.command_line", "CommandLine", "process.args"),
+    "process_image": ("process", "process_image", "process.executable", "process.name", "Image", "NewProcessName"),
+}
+
+
+def _flatten(record: dict, prefix: str = "", out: dict | None = None) -> dict:
+    out = {} if out is None else out
+    for k, v in record.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            _flatten(v, key + ".", out)
+        elif key not in out:
+            out[key] = v
+    return out
+
+
+def _pick(flat: dict, keys):
+    for k in keys:
+        v = flat.get(k)
+        if v not in (None, ""):
+            return v
+    return None
+
+
+def _vendor_techniques(record: dict, flat: dict):
+    for key in ("techniques", "mitre", "mitre_techniques", "threat.technique.id"):
+        v = flat.get(key)
+        if v:
+            return v
+    threat = record.get("threat")
+    if isinstance(threat, dict):
+        t = threat.get("technique")
+        if isinstance(t, list):
+            return [str(x.get("id")) for x in t if isinstance(x, dict) and x.get("id")]
+        if isinstance(t, dict) and t.get("id"):
+            return t["id"]
+    return ()
+
+
 def _load_neutral_alerts(records) -> list:
-    """Parse a neutral JSON/JSONL alert feed so any SIEM or EDR that emits JSON can feed Alibi."""
+    """Parse a neutral JSON/JSONL alert feed, including Elastic ECS and Splunk field names, so any
+    SIEM or EDR that emits JSON can feed Alibi. Binary EVTX and osquery epoch feeds still need a
+    format-specific adapter (see KNOWN_LIMITATIONS)."""
     alerts = []
     for r in records:
         if not isinstance(r, dict):
             continue
-        ts = r.get("timestamp") or r.get("ts")
+        flat = _flatten(r)
+        ts = _pick(flat, _NEUTRAL_ALIASES["timestamp"])
         if not ts:
             continue
-        techs = r.get("techniques") or r.get("mitre") or r.get("mitre_techniques") or ()
+        techs = _vendor_techniques(r, flat)
         if isinstance(techs, str):
             techs = [t.strip() for t in techs.split(",") if t.strip()]
+        techs = tuple(str(t) for t in techs) if isinstance(techs, (list, tuple)) else ()
         raw_fields = r.get("fields")
         fields = {str(k): str(v) for k, v in raw_fields.items()} if isinstance(raw_fields, dict) else {}
+        eid = _pick(flat, _NEUTRAL_ALIASES["event_id"])
+        cmd = _pick(flat, _NEUTRAL_ALIASES["command_line"])
+        if isinstance(cmd, list):
+            cmd = " ".join(str(x) for x in cmd)
+        proc = _pick(flat, _NEUTRAL_ALIASES["process_image"])
         alerts.append(Alert(
             timestamp=_parse_ts_any(ts),
-            rule_title=str(r.get("rule") or r.get("rule_title") or "").strip(),
-            level=str(r.get("level") or "info").strip(),
-            computer=str(r.get("computer") or r.get("host") or "").strip(),
-            channel=str(r.get("channel") or "").strip(),
-            event_id=_to_int(str(r["event_id"])) if r.get("event_id") is not None else None,
-            record_id=str(r.get("record_id") or r.get("id") or "").strip(),
-            rule_id=str(r.get("rule_id") or "").strip(),
-            mitre_techniques=tuple(techs),
-            command_line=str(r["command"]) if r.get("command") else (str(r["command_line"]) if r.get("command_line") else None),
-            process_image=str(r["process"]) if r.get("process") else (str(r["process_image"]) if r.get("process_image") else None),
+            rule_title=str(_pick(flat, _NEUTRAL_ALIASES["rule_title"]) or "").strip(),
+            level=str(_pick(flat, _NEUTRAL_ALIASES["level"]) or "info").strip(),
+            computer=str(_pick(flat, _NEUTRAL_ALIASES["computer"]) or "").strip(),
+            channel=str(_pick(flat, _NEUTRAL_ALIASES["channel"]) or "").strip(),
+            event_id=_to_int(str(eid)) if eid is not None else None,
+            record_id=str(_pick(flat, _NEUTRAL_ALIASES["record_id"]) or "").strip(),
+            rule_id=str(_pick(flat, _NEUTRAL_ALIASES["rule_id"]) or "").strip(),
+            mitre_techniques=techs,
+            command_line=str(cmd) if cmd else None,
+            process_image=str(proc) if proc else None,
             fields=fields,
         ))
     alerts.sort(key=lambda a: a.timestamp)
