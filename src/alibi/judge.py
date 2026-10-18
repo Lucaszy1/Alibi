@@ -551,10 +551,19 @@ class Judge:
             return self._harness(alert, link)
 
         verdict, context = self._deterministic(alert, link)
-        if verdict.verdict is VerdictKind.UNKNOWN and self.model_tier is not None:
-            override = self.model_tier.judge(context)
-            if override is not None:
-                return override
+        if self.model_tier is not None:
+            if verdict.verdict is VerdictKind.UNKNOWN:
+                override = self.model_tier.judge(context)
+                if override is not None:
+                    return override
+            elif verdict.verdict is VerdictKind.UNJUSTIFIED and context.untrusted_results:
+                # Paraphrase recovery: untrusted content is present but no literal link was found,
+                # so a semantically-induced hijack may be laundered past the deterministic tiers.
+                # Let the model read the untrusted content, but accept its override ONLY if it
+                # strengthens the verdict to HIJACKED. The model may never exonerate a flag.
+                override = self.model_tier.judge(context)
+                if override is not None and override.verdict is VerdictKind.HIJACKED:
+                    return override
         return verdict
 
     # -- harness -------------------------------------------------------------------------------
