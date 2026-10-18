@@ -22,6 +22,7 @@ from typing import Iterable, Protocol
 from alibi.alerts import Alert
 from alibi.link import DEFAULT_WINDOW_SECONDS, LinkResult, Origin, link_alert, link_alerts
 from alibi.taint import trace_taint
+from alibi.decode import reveal
 from alibi.transcript import Event, SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import (
     Concern,
@@ -359,7 +360,7 @@ def trace_provenance(
     tool_names: dict[str, str],
     roots: Iterable[str] = (),
 ) -> Provenance:
-    action = _call_text(call)
+    action = reveal(_call_text(call))
     action_norm = _norm_text(action)
     targets = extract_targets(action)
     if call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
@@ -379,7 +380,7 @@ def trace_provenance(
     # never generic UNKNOWN noise, so ordinary code that merely contains a URL stays clean.
     content_targets: set[Target] = set()
     if call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
-        written = " ".join(str(call.tool_input.get(k, "")) for k in ("content", "new_string", "new_str", "new_source"))
+        written = reveal(" ".join(str(call.tool_input.get(k, "")) for k in ("content", "new_string", "new_str", "new_source")))
         content_targets = {
             t for t in extract_targets(written)
             if t.kind is not TargetKind.PATH and not _covered(t, user_paths, user_norm, roots)

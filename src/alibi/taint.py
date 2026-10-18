@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from alibi.transcript import ToolCall, ToolResult
 from alibi.transcript import SourceKind
+from alibi.decode import reveal
 
 _URL = re.compile(r"https?://[^\s'\"<>|`)]+", re.I)
 _IP = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])")
@@ -82,10 +83,10 @@ def trace_taint(events, target_call: ToolCall) -> TaintResult:
         if e is target_call:
             break
         if isinstance(e, ToolResult) and e.source_kind is SourceKind.UNTRUSTED:
-            for tok, kind in _tokens(e.content):
+            for tok, kind in _tokens(reveal(e.content)):
                 tainted.setdefault(tok.lower(), (tok, e, kind))
         elif isinstance(e, ToolCall):
-            low = _text(e).lower()
+            low = reveal(_text(e)).lower()
             carried = next(((o, s, k) for key, (o, s, k) in tainted.items() if key in low), None)
             via_path = next((tp for tp in tainted_paths if tp in low), None)
             if carried or via_path:
@@ -99,7 +100,7 @@ def trace_taint(events, target_call: ToolCall) -> TaintResult:
                 if wrote:
                     tainted_paths[wrote.lower()] = (wrote, source, kind, steps[-1])
 
-    low = _text(target_call).lower()
+    low = reveal(_text(target_call)).lower()
     direct = next(((o, s, k) for key, (o, s, k) in tainted.items() if key in low), None)
     if direct:
         o, s, k = direct
