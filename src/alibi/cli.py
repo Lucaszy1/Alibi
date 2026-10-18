@@ -208,6 +208,8 @@ def _add_common_args(sp) -> None:
     sp.add_argument("--window-seconds", type=float, default=DEFAULT_WINDOW_SECONDS, metavar="N",
                     help=f"attribution window for calls with no result or run in background (default {DEFAULT_WINDOW_SECONDS:g})")
     sp.add_argument("--color", choices=("auto", "always", "never"), default="auto")
+    sp.add_argument("--allow", type=Path, default=None, metavar="FILE",
+                    help="allowlist file of sanctioned hosts/paths/commands that downgrade a flag to JUSTIFIED")
     sp.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
                     help="Ollama host for the model tier (default http://127.0.0.1:11434)")
     sp.add_argument("--max-model-calls", type=int, default=50, metavar="N",
@@ -391,7 +393,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         from alibi.model_tier import CachingModelTier, OllamaBackend
         model_tier = CachingModelTier(OllamaBackend(model=args.model, host=args.ollama_host),
                                       max_calls=args.max_model_calls)
-    verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
+    judge = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds)
+    if getattr(args, "allow", None):
+        from alibi.allowlist import load_allowlist
+        judge.allowlist = load_allowlist(args.allow)
+    verdicts = judge.judge_all(alerts)
     if args.command == "remediate":
         return _remediate(verdicts, args, out, err)
     if args.command == "incidents":

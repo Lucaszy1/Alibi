@@ -551,11 +551,12 @@ class Judge:
             return self._harness(alert, link)
 
         verdict, context = self._deterministic(alert, link)
+        final = verdict
         if self.model_tier is not None:
             if verdict.verdict is VerdictKind.UNKNOWN:
                 override = self.model_tier.judge(context)
                 if override is not None:
-                    return override
+                    final = override
             elif verdict.verdict is VerdictKind.UNJUSTIFIED and context.untrusted_results:
                 # Paraphrase recovery: untrusted content is present but no literal link was found,
                 # so a semantically-induced hijack may be laundered past the deterministic tiers.
@@ -563,10 +564,25 @@ class Judge:
                 # strengthens the verdict to HIJACKED. The model may never exonerate a flag.
                 override = self.model_tier.judge(context)
                 if override is not None and override.verdict is VerdictKind.HIJACKED:
-                    return override
-        return verdict
+                    final = override
+        return self._apply_allowlist(final, alert, link)
 
     # -- harness -------------------------------------------------------------------------------
+
+    def _apply_allowlist(self, v: Verdict, alert: Alert, link: LinkResult) -> Verdict:
+        """A user-sanctioned target downgrades a flag to JUSTIFIED, keeping the original finding
+        in the reason. The allowlist comes only from the trusted --allow file, never the session."""
+        al = getattr(self, "allowlist", None)
+        if (al is None or al.empty or v.disposition is not Disposition.VERDICT
+                or v.verdict not in (VerdictKind.HIJACKED, VerdictKind.UNJUSTIFIED)):
+            return v
+        call = link.tool_call
+        text = (_call_text(call) if call is not None else "") + " " + (alert.command_line or "")
+        rule = al.match(text)
+        if not rule:
+            return v
+        return replace(v, verdict=VerdictKind.JUSTIFIED,
+                       reason=f"Sanctioned by allowlist ({rule}); original finding: {v.reason}")
 
     def _harness(self, alert: Alert, link: LinkResult) -> Verdict:
         reasons = []
