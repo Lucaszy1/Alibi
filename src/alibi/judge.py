@@ -645,7 +645,10 @@ class Judge:
         # untrusted input and then ran. Flag such a flow when the action is consequential (a strict
         # sensitive category, or it executed a dropped file); plain benign base64 does not qualify.
         if not prov.untrusted_hits:
-            taint = trace_taint(self.events, call)
+            cache = self.__dict__.setdefault("_taint_cache", {})
+            if id(call) not in cache:
+                cache[id(call)] = trace_taint(self.events, call)
+            taint = cache[id(call)]
             if taint.tainted and (strict_unmet or taint.via_file):
                 ev = [call_ev]
                 hop = next((st for st in taint.path if st.wrote), None)
