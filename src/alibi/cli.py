@@ -255,6 +255,13 @@ def _build_parser() -> argparse.ArgumentParser:
                           help="Claude Code PreToolUse hook: judge a proposed tool call on stdin and allow/warn/block")
     hook.add_argument("--allow", type=Path, default=None, metavar="FILE",
                       help="allowlist file of sanctioned hosts/paths/commands")
+
+    rep = sub.add_parser("report", help="Markdown incident report with provenance and proposed reversals")
+    _add_common_args(rep)
+    rep.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
+                     help="adjudicate UNKNOWNs inline before reporting")
+    rep.add_argument("--incident-window", type=float, default=120.0, metavar="N",
+                     help="max seconds between flagged actions on one host to chain them (default 120)")
     return parser
 
 
@@ -324,6 +331,16 @@ def _hook(args, in_stream, out) -> int:
         "permissionDecisionReason": f"Alibi: {v.reason}",
     }}) + "\n")
     return 0
+
+
+def _report(verdicts, args, out, err) -> int:
+    """Print a Markdown incident report; exit 1 when there is an incident to report."""
+    from alibi.incidents import correlate
+    from alibi.report import build_report
+
+    window = getattr(args, "incident_window", 120.0)
+    out.write(build_report(verdicts, window))
+    return 1 if correlate(verdicts, window) else 0
 
 
 def _incidents(verdicts, args, out, err) -> int:
@@ -460,6 +477,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         return _remediate(verdicts, args, out, err)
     if args.command == "incidents":
         return _incidents(verdicts, args, out, err)
+    if args.command == "report":
+        return _report(verdicts, args, out, err)
     if args.command == "adjudicate":
         selected = [v for v in verdicts if v.tier is Tier.MODEL]
     else:
