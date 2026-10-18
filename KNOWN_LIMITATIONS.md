@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(286 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(313 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -69,8 +69,11 @@ Privacy
   DEFERRED: native binary/log parsers (EVTX, Windows Event Log, auditd, osquery, Elastic/Splunk
   native) are a convenience layer on top of that neutral contract, not a correctness gap. Fix path:
   per-format adapters that normalize into the neutral shape, added when a real feed needs one.
-- M11 allowlists (false-positive controls).
-- M-An unexplained-action anomaly tier (attack-agnostic catch for no-source novel attacks).
+- M11 allowlists: DONE. A trusted --allow file downgrades a flagged verdict to JUSTIFIED
+  (judge._apply_allowlist), keeping the original finding in the reason; tested.
+- M-An anomaly tier: DONE. A high-severity action with no external target and no tie to the
+  request is surfaced as UNKNOWN / ELEVATED for review (judge._anomaly) — the attack-agnostic
+  catch for a novel attack that leaves no other signal; tested.
 - M12 explainability: DONE (incident report artifact, Mermaid provenance graph, and secret
   redaction in reports are all shipped and tested).
 - M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
