@@ -444,3 +444,11 @@ def apply_undo(steps, approver, executor=None) -> list:
         executor(s)
         results.append((s, "applied"))
     return results
+
+
+def undo_from_json(text):
+    """Reconstruct undo steps from a saved rollback bundle so `alibi undo` can revert later."""
+    data = json.loads(text)
+    return [UndoStep(d["action"], d["description"], d.get("command"), bool(d["manual"]),
+                     tuple(d["argv"]) if d.get("argv") else None)
+            for d in data]

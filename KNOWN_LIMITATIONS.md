@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(283 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(286 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -35,8 +35,8 @@ Remediation
 - Quoted multi-word task or service names are safely withheld to manual review, not auto-parsed.
 - Undo: Alibi rolls back its own reversible containment (restore a quarantined file, remove a
   firewall rule) via a serializable bundle, and never auto-undoes a persistence deletion (that would
-  reinstate the attacker's autostart). DONE. Remaining: surface the undo bundle through the CLI; fix
-  path: a `remediate --undo` path that reads a saved bundle.
+  reinstate the attacker's autostart). DONE, and surfaced through the CLI: `remediate --apply` writes
+  a rollback bundle and `alibi undo <bundle> --apply` reverts it.
 
 Model, confidence, performance
 - The deterministic judge is now benchmarked (M15): 0.933 accuracy, 0.915 macro-F1 on the labeled
@@ -72,7 +72,7 @@ Privacy
   redaction in reports are all shipped and tested).
 - M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
   WMI handling, rollback bundle + undo, argv-style shell-free execution). Remaining deferred: macOS
-  pf adapter; CLI surfacing of the undo bundle.
+  pf adapter.
 - M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
   tested; the MCP server is not yet built).
 - M15 benchmark and evaluation: DONE for the deterministic judge (labeled paired corpus, confusion

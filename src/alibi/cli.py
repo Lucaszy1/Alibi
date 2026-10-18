@@ -243,6 +243,8 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="run each proposed reversal, asking y/N before every one (default: dry run, propose only)")
     rem.add_argument("--os", choices=("windows", "posix"), default=None,
                      help="target OS for generated reversal commands (default: the machine running alibi)")
+    rem.add_argument("--undo-out", type=Path, default=None, metavar="FILE",
+                     help="on --apply, write a rollback bundle here to revert later (default alibi-undo.json)")
 
     inc = sub.add_parser("incidents", help="group flagged verdicts from one intrusion into correlated incidents")
     _add_common_args(inc)
@@ -255,6 +257,10 @@ def _build_parser() -> argparse.ArgumentParser:
                           help="Claude Code PreToolUse hook: judge a proposed tool call on stdin and allow/warn/block")
     hook.add_argument("--allow", type=Path, default=None, metavar="FILE",
                       help="allowlist file of sanctioned hosts/paths/commands")
+
+    undo = sub.add_parser("undo", help="apply a saved rollback bundle to revert Alibi's own reversals")
+    undo.add_argument("bundle", type=Path, help="undo bundle JSON written by `remediate --apply`")
+    undo.add_argument("--apply", action="store_true", help="run each undo step, asking y/N (default: dry run)")
 
     rep = sub.add_parser("report", help="Markdown incident report with provenance and proposed reversals")
     _add_common_args(rep)
@@ -430,7 +436,54 @@ def _remediate(verdicts, args, out, err) -> int:
         out.write("\n")
         for r, status in results:
             out.write(f"  - {r.action}: {status}\n")
+    from alibi.remediate import bundle_to_json, rollback_bundle
+    bundle = rollback_bundle(results, getattr(args, "os", None))
+    if bundle:
+        dest = args.undo_out or Path("alibi-undo.json")
+        dest.write_text(bundle_to_json(bundle), encoding="utf-8")
+        err.write(f"\nWrote rollback bundle to {dest} ({len(bundle)} step(s)); "
+                  f"revert with: alibi undo {dest} --apply\n")
     return 1
+
+
+def _undo(args, out, err) -> int:
+    """Apply a saved rollback bundle to revert Alibi's own reversals, under the same y/N gate."""
+    from alibi.remediate import apply_undo, undo_from_json
+
+    if not args.bundle.is_file():
+        print(f"alibi: undo bundle not found: {args.bundle}", file=err)
+        return 2
+    try:
+        steps = undo_from_json(args.bundle.read_text(encoding="utf-8"))
+    except Exception as exc:
+        print(f"alibi: could not read undo bundle: {type(exc).__name__}: {exc}", file=err)
+        return 2
+    if not steps:
+        print("alibi: empty bundle; nothing to undo.", file=err)
+        return 0
+    if not args.apply:
+        for i, st in enumerate(steps, 1):
+            out.write(f"[{i}] {st.action}: {st.description}\n")
+            out.write(f"      run: {st.command}\n" if st.command else "      (manual)\n")
+        out.write(f"\n{len(steps)} undo step(s). Dry run; re-run with --apply to revert (asks y/N each).\n")
+        return 0
+
+    def approver(st) -> bool:
+        err.write(f"\nUndo [{st.action}] {st.description}\n  run: {st.command}\n")
+        try:
+            ans = input("  apply this undo? [y/N] ")
+        except EOFError:
+            return False
+        return ans.strip().lower() in ("y", "yes")
+
+    def executor(st) -> None:
+        import subprocess
+        err.write(f"  running: {st.command}\n")
+        subprocess.run(st.command, shell=True, check=False)
+
+    for st, status in apply_undo(steps, approver, executor):
+        out.write(f"  - {st.action}: {status}\n")
+    return 0
 
 
 def _bench(args, out, err) -> int:
@@ -466,6 +519,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         return _hook(args, sys.stdin, out)
     if args.command == "bench":
         return _bench(args, out, err)
+    if args.command == "undo":
+        return _undo(args, out, err)
 
     if not args.results.is_file():
         print(f"alibi: results file not found: {args.results}", file=err)
