@@ -19,6 +19,8 @@ The standard profile has no MITRE columns. The verbose profiles add ``MitreTacti
 from __future__ import annotations
 
 import csv
+import io
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -179,6 +181,57 @@ def load_rule_tags(rules_dir: str | Path, rule_ids: set[str]) -> dict[str, list[
     return out
 
 
+def _iter_json_records(text: str):
+    if text.lstrip()[:1] == "[":
+        return [r for r in json.loads(text) if isinstance(r, dict)]
+    out = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
+            out.append(json.loads(line))
+    return out
+
+
+def _parse_ts_any(value):
+    s = str(value).strip()
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return _parse_timestamp(s)
+
+
+def _load_neutral_alerts(records) -> list:
+    """Parse a neutral JSON/JSONL alert feed so any SIEM or EDR that emits JSON can feed Alibi."""
+    alerts = []
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        ts = r.get("timestamp") or r.get("ts")
+        if not ts:
+            continue
+        techs = r.get("techniques") or r.get("mitre") or r.get("mitre_techniques") or ()
+        if isinstance(techs, str):
+            techs = [t.strip() for t in techs.split(",") if t.strip()]
+        raw_fields = r.get("fields")
+        fields = {str(k): str(v) for k, v in raw_fields.items()} if isinstance(raw_fields, dict) else {}
+        alerts.append(Alert(
+            timestamp=_parse_ts_any(ts),
+            rule_title=str(r.get("rule") or r.get("rule_title") or "").strip(),
+            level=str(r.get("level") or "info").strip(),
+            computer=str(r.get("computer") or r.get("host") or "").strip(),
+            channel=str(r.get("channel") or "").strip(),
+            event_id=_to_int(str(r["event_id"])) if r.get("event_id") is not None else None,
+            record_id=str(r.get("record_id") or r.get("id") or "").strip(),
+            rule_id=str(r.get("rule_id") or "").strip(),
+            mitre_techniques=tuple(techs),
+            command_line=str(r["command"]) if r.get("command") else (str(r["command_line"]) if r.get("command_line") else None),
+            process_image=str(r["process"]) if r.get("process") else (str(r["process_image"]) if r.get("process_image") else None),
+            fields=fields,
+        ))
+    alerts.sort(key=lambda a: a.timestamp)
+    return alerts
+
+
 def _build_alert(row: dict[str, str], rule_tags: dict[str, list[str]]) -> Alert:
     extra = parse_packed_fields(row.get("ExtraFieldInfo", ""))
     details = parse_packed_fields(row.get("Details", ""))
@@ -232,8 +285,10 @@ def load_alerts(path: str | Path, rules_dir: str | Path | None = None) -> list[A
     if path.stat().st_size > MAX_ALERTS_BYTES:
         raise ValueError(f"alerts CSV too large: {path.stat().st_size} bytes exceeds {MAX_ALERTS_BYTES}")
     # utf-8-sig: Hayabusa may write a BOM.
-    with path.open(encoding="utf-8-sig", newline="") as f:
-        rows = list(csv.DictReader(f))
+    text = path.read_text(encoding="utf-8-sig")
+    if path.suffix.lower() in (".json", ".jsonl") or text.lstrip()[:1] in ("[", "{"):
+        return _load_neutral_alerts(_iter_json_records(text))
+    rows = list(csv.DictReader(io.StringIO(text)))
 
     rule_tags: dict[str, list[str]] = {}
     has_tag_columns = bool(rows) and ("MitreTactics" in rows[0] or "MitreTags" in rows[0])
