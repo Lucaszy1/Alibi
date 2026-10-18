@@ -44,19 +44,22 @@ session transcript is what separates a hijack from an agent that did the right t
 
 ## 3. Remediation (dry run)
 
-For the hijack, Alibi proposes a reversal. It changes nothing unless you pass `--apply`, which
-asks for confirmation before each action:
+For the hijack, Alibi proposes reversals. It changes nothing unless you pass `--apply`, which asks
+for confirmation before each action:
 
 ```
 [1] rotate_credential: Rotate or revoke any credential the agent could have read or sent.
-                       Alibi cannot do this for you.
+[2] block_host: Block the exfiltration host telemetry-collect.dev by routing it to 0.0.0.0 in the
+    hosts file.   (reversible)
 
-1 proposal(s). Dry run; re-run with --apply to act (each asks you to confirm first).
+2 proposal(s). Dry run; re-run with --apply to act (each asks you to confirm first).
 ```
 
-The ten overlapping rule hits for the one `cmdkey | curl` action collapse into a single
-proposal. Because the credentials already left the machine, the only honest fix is manual
-rotation, so Alibi says exactly that instead of pretending it can undo an exfiltration.
+The ten overlapping rule hits for the one `cmdkey | curl` action collapse into two proposals, one
+per distinct reversal. Blocking the host is automatic and reversible once you approve it; rotating
+the credentials stays manual, because they already left the machine and only you can revoke them.
+Any reversal whose target carried unusual characters would be withheld and marked for manual
+review, so Alibi never runs a command it cannot vouch for.
 
 ## Files
 

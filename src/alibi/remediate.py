@@ -147,6 +147,32 @@ _SAFE_UNIT_RE = re.compile(r"^[A-Za-z0-9@._\-]+$")
 _SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9 _.\-\\/]+$")
 
 
+_URL_HOST_RE = re.compile(r"https?://([^/\s\"']+)", re.I)
+_REASON_HOST_RE = re.compile(r"targets host:([^\s]+)", re.I)
+
+
+def _host(cmd, reason):
+    m = _URL_HOST_RE.search(cmd) or _REASON_HOST_RE.search(reason)
+    return m.group(1).strip().strip(".,;") if m else None
+
+
+def _extra(v, os_name):
+    cmd = _command(v)
+    reason = v.reason.lower()
+    is_exfil = ("targets host" in reason or "exfiltrat" in reason
+                or (bool(_EXFIL_CMD_RE.search(cmd)) and ("http" in cmd.lower() or "--data" in cmd.lower())))
+    host = _host(cmd, reason) if is_exfil else None
+    if not host:
+        return []
+    if os_name == "windows":
+        blk = rf"echo 0.0.0.0 {host} >> %SystemRoot%\System32\drivers\etc\hosts"
+    else:
+        blk = f'echo "0.0.0.0 {host}" | sudo tee -a /etc/hosts'
+    return [Remediation(v, "block_host",
+                        f"Block the exfiltration host {host} by routing it to 0.0.0.0 in the hosts file.",
+                        command=blk, target=host, reversible=True, manual=False)]
+
+
 def _target_is_safe(rem) -> bool:
     if rem.command and ("\n" in rem.command or "\r" in rem.command):
         return False
@@ -188,12 +214,13 @@ def plan_remediations(verdicts, target_os: str | None = None) -> list:
     for v in verdicts:
         if v.disposition is not Disposition.VERDICT or v.verdict not in _FLAGGED:
             continue
-        rem = _harden(_propose(v, os_name))
-        key = (rem.action, rem.command, rem.target)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(rem)
+        for rem in (_propose(v, os_name), *_extra(v, os_name)):
+            rem = _harden(rem)
+            key = (rem.action, rem.command, rem.target)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(rem)
     return out
 
 
