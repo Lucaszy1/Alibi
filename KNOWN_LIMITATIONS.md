@@ -2,7 +2,7 @@
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
 approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(259 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
+(283 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
 be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
 immediately if one turns out to block real use.
 
@@ -39,8 +39,13 @@ Remediation
   path: a `remediate --undo` path that reads a saved bundle.
 
 Model, confidence, performance
-- Model tier needs local Ollama and its accuracy is not yet measured (M15).
-- Confidence values are hand-tuned, not calibrated against data (M15).
+- The deterministic judge is now benchmarked (M15): 0.933 accuracy, 0.915 macro-F1 on the labeled
+  corpus, zero silent-allows and zero false-flags, with ablations and baselines showing each tier
+  earns its place (benchmark/REPORT.md). DONE.
+- Model-tier accuracy is still unmeasured: the benchmark runs the deterministic judge only (no local
+  Ollama in CI). Fix path: a model-tier eval pass once a model is pinned. Deferred.
+- Confidence values are hand-tuned, not yet calibrated against corpus scores. Fix path: calibrate on
+  an expanded corpus. Deferred.
 - trace_taint is memoized per call but still O(events) per distinct call; very large sessions will
   be slow. Fix path: a precomputed per-session taint index.
 
@@ -70,7 +75,10 @@ Privacy
   pf adapter; CLI surfacing of the undo bundle.
 - M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
   tested; the MCP server is not yet built).
-- M15 benchmark and evaluation (corpus, metrics, ablations, baselines, confidence calibration).
+- M15 benchmark and evaluation: DONE for the deterministic judge (labeled paired corpus, confusion
+  matrix + precision/recall/F1, operational detection view, tier ablations, naive baselines, and an
+  `alibi bench` CLI writing benchmark/REPORT.md). Remaining deferred: model-tier evaluation and
+  confidence calibration; the corpus is synthetic-but-realistic and modest in size, to be expanded.
 - M16 paper. M17 vision (policy DSL, PyPI, docs site, public benchmark).
 
 ## C. Process and housekeeping
