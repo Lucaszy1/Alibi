@@ -1,8 +1,10 @@
 # Alibi
 
-Alibi reads AI coding-agent session transcripts alongside endpoint-security alerts and decides
-whether each alert was justified by what the user actually asked for. When an action was not
-justified, Alibi can propose a concrete, human-approved reversal.
+Alibi reads an AI coding agent's session transcript alongside the endpoint-security alerts it
+triggered and decides whether each flagged action was the user's intent or an injected attack. It
+follows untrusted data through the session, correlates the steps of one intrusion, and proposes a
+human-approved reversal. It is provenance-aware, not signature-based: it asks where an instruction
+came from, so a novel technique it has never seen is still caught when it traces to untrusted input.
 
 ## Verdicts
 
@@ -14,83 +16,99 @@ justified, Alibi can propose a concrete, human-approved reversal.
 
 ## How it works
 
-A session transcript becomes a timeline of user prompts, agent tool calls, and tool results
-(each result marked TRUSTED or UNTRUSTED). Endpoint alerts are linked to the tool call that
-caused them, then judged in tiers:
+A session transcript becomes a timeline of user prompts, agent tool calls, and tool results (each
+result marked TRUSTED or UNTRUSTED). Endpoint alerts are linked to the tool call that caused them,
+then judged in tiers, cheapest first:
 
-- Provenance: was the action driven by untrusted content that entered through a tool result?
-- Policy: does the action fall in a sensitive category (exfiltration, data destruction and
-  impact, credential and collection, command-and-control, persistence) the user never licensed?
-- Bulk-rewrite: a burst of file rewrites the request never asked for (ransomware-shaped).
-- Model (optional): a local Ollama model adjudicates whatever the deterministic tiers leave
-  UNKNOWN. A model verdict cannot invent provenance, so a HIJACKED call with no untrusted
-  source is downgraded to UNJUSTIFIED.
+- Provenance: is the action's target traceable to the user's prompts, or only to untrusted content?
+- Taint: follow untrusted data to the argument of a dangerous call, across calls, including a file
+  the agent wrote from untrusted input and later executed. The flow path is the evidence.
+- Policy: does the action fall in a sensitive category (exfiltration, destruction, credential and
+  collection, command-and-control, persistence, defense impairment) the user never licensed?
+- Bulk-rewrite: a burst of file rewrites the request never asked for (ransomware shaped).
+- Model (optional): a local Ollama model adjudicates the UNKNOWN pile and can recover a paraphrased
+  hijack, but it can never clear a deterministic flag.
 
-Transcripts from other agents can be ingested through a neutral role/kind JSONL format, so Alibi
-is not tied to Claude Code.
+A decoding pass runs before the tiers, so payloads hidden behind base64, PowerShell `-enc`, hex,
+percent-encoding, string concatenation, or shell variables are judged on their real content.
+Flagged actions on one host within a window are correlated into a single incident. Sessions from
+other agents can be ingested through a neutral role/kind JSONL format.
 
 ## Usage
 
 ### scan (fast, deterministic)
 ```
-alibi scan <hayabusa-results.csv> [transcript.jsonl]   # transcript defaults to the newest under ~/.claude/projects
-alibi scan results.csv --json                          # JSON Lines, one object per verdict
-alibi scan results.csv --all                           # also list JUSTIFIED, low-concern harness, stand-aside
-alibi scan results.csv --min-confidence 0.7 --window-seconds 60
-alibi scan results.csv --model                         # also adjudicate UNKNOWNs inline (local Ollama)
+alibi scan <hayabusa-results.csv> [transcript.jsonl]
+alibi scan results.csv --json
+alibi scan results.csv --all --min-confidence 0.7
+alibi scan results.csv --model          # also adjudicate UNKNOWNs inline (local Ollama)
 ```
 
 ### adjudicate (background model pass)
-Resolves only the UNKNOWN pile with a local model and reports just what the model decided.
 ```
-alibi adjudicate results.csv transcript.jsonl          # default model qwen2.5:7b
-alibi adjudicate results.csv --model llama3.1:8b --json
+alibi adjudicate results.csv transcript.jsonl --model qwen2.5:7b --json
 ```
 
 ### remediate (propose, then optionally act)
-Proposes a reversal for each HIJACKED or UNJUSTIFIED verdict. Dry run by default: it changes
-nothing. With --apply it runs each proposal only after you confirm it, one at a time.
 ```
-alibi remediate results.csv transcript.jsonl          # list proposals, run nothing
-alibi remediate results.csv --json                    # JSON Lines proposals for a dashboard or CI
-alibi remediate results.csv --apply                   # act, asking y/N before every action
+alibi remediate results.csv transcript.jsonl   # list proposals, run nothing
+alibi remediate results.csv --json             # machine-readable proposals
+alibi remediate results.csv --apply            # act, asking y/N before every action
 ```
-Proposals include: delete a scheduled task the agent created, quarantine a file it wrote (moved
-to a timestamped path so nothing is overwritten), restore files from version control after an
-unrequested mass rewrite, or flag a leaked credential for manual rotation.
+
+### incidents (correlate an intrusion's steps)
+```
+alibi incidents results.csv transcript.jsonl              # grouped attack chains
+alibi incidents results.csv --json --incident-window 120
+```
 
 ## Exit codes
 
-| Code | Meaning                                                                                          |
-|------|--------------------------------------------------------------------------------------------------|
-| `0`  | nothing HIJACKED or UNJUSTIFIED (for `remediate`, nothing to propose)                            |
-| `1`  | at least one HIJACKED or UNJUSTIFIED at or above `--min-confidence` (for `remediate`, a proposal) |
-| `2`  | error (bad input, missing file)                                                                  |
+| Code | Meaning                                                                        |
+|------|--------------------------------------------------------------------------------|
+| `0`  | nothing flagged (for `remediate`/`incidents`, nothing to propose or correlate) |
+| `1`  | at least one HIJACKED or UNJUSTIFIED at or above `--min-confidence`             |
+| `2`  | error (bad input, missing file)                                                |
+
+## Security of Alibi itself
+
+Alibi treats everything it ingests as hostile. A reversal with shell-unsafe or truncated target
+characters is never auto-run; the judge model can never override a deterministic flag or be steered
+by session text; oversized input is refused instead of exhausting memory; the parsers and hot
+regexes are fuzzed against malformed and random input. See `KNOWN_LIMITATIONS.md` for the honest
+edges and how each is tracked.
 
 ## Layout
-
 ```
 src/alibi/   package code
 tests/       pytest suite and fixtures
+examples/    a cold-start demo on real captured telemetry
 ```
 
 ## Development
-
 ```
 python -m venv .venv
 .venv\Scripts\activate        # Windows; use `source .venv/bin/activate` elsewhere
 pip install -e ".[dev]"
 pytest
 ```
-The model tier needs a local Ollama server. Without it, `scan` and `remediate` still run fully
-on the deterministic tiers.
+The model tier needs a local Ollama server. Without it, every command runs fully on the
+deterministic tiers.
 
 ## Modules
 
-- `transcript.py`: session transcripts (Claude Code, or neutral cross-agent JSONL) into a timeline.
-- `alerts.py`: Hayabusa results CSV into alerts with process lineage and MITRE ATT&CK tags.
-- `link.py`: links each alert to the tool call that caused it, to the agent harness, or to nothing.
-- `judge.py` / `verdict.py`: provenance, policy, and bulk-rewrite tiers plus the optional model tier.
-- `model_tier.py`: local Ollama adjudication with caching and a provenance guard.
-- `remediate.py`: proposes reversals and runs them only behind a per-action approval gate.
-- `cli.py`: the scan / adjudicate / remediate commands.
+- `transcript.py`: sessions (Claude Code or neutral JSONL) into a timeline; TRUSTED/UNTRUSTED results.
+- `alerts.py`: Hayabusa results CSV into alerts with process lineage and MITRE tags.
+- `link.py`: link each alert to its tool call, the harness, or nothing.
+- `decode.py`: reveal payloads hidden behind encodings, concatenation, and shell variables.
+- `taint.py`: follow untrusted data into a later dangerous call, across dropped files.
+- `judge.py` / `verdict.py`: provenance, taint, policy, bulk-rewrite, and the optional model tier.
+- `model_tier.py`: local Ollama adjudication, fenced and guarded so it cannot be steered.
+- `incidents.py`: correlate flagged verdicts into same-host attack chains.
+- `remediate.py`: propose reversals and run them only behind a per-action approval gate.
+- `cli.py`: the scan / adjudicate / remediate / incidents commands.
+
+## Known limitations
+
+Alibi is honest about its edges. `KNOWN_LIMITATIONS.md` lists every known limitation and deferred
+item, each mapped to the milestone that will address it. Nothing there is a silent defect.
