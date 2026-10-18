@@ -250,6 +250,11 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="adjudicate UNKNOWNs inline before correlating")
     inc.add_argument("--incident-window", type=float, default=120.0, metavar="N",
                      help="max seconds between flagged actions on one host to chain them (default 120)")
+
+    hook = sub.add_parser("hook",
+                          help="Claude Code PreToolUse hook: judge a proposed tool call on stdin and allow/warn/block")
+    hook.add_argument("--allow", type=Path, default=None, metavar="FILE",
+                      help="allowlist file of sanctioned hosts/paths/commands")
     return parser
 
 
@@ -269,6 +274,56 @@ def _remediation_to_json(r, status=None):
     if status is not None:
         d["status"] = status
     return d
+
+
+def _hook(args, in_stream, out) -> int:
+    """Claude Code PreToolUse hook: read the proposed call on stdin, judge it against the session,
+    and deny or ask when it looks like a hijack or an unrequested sensitive action. Silent on allow,
+    so the normal permission flow is untouched. Fails open: never blocks on its own errors."""
+    from datetime import datetime, timezone
+
+    from alibi.inline import Decision, assess
+    from alibi.transcript import ToolCall
+
+    try:
+        raw = in_stream.read()
+        payload = json.loads(raw) if raw and raw.strip() else {}
+    except (ValueError, OSError):
+        return 0
+    if not isinstance(payload, dict) or payload.get("hook_event_name", "PreToolUse") != "PreToolUse":
+        return 0
+
+    events = []
+    tpath = payload.get("transcript_path")
+    if tpath:
+        try:
+            events = load_transcript(Path(tpath))
+        except Exception:
+            events = []
+
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    call = ToolCall(datetime.now(timezone.utc), str(payload.get("tool_use_id") or "candidate"),
+                    str(payload.get("tool_name") or ""), tool_input, payload.get("cwd"))
+
+    allowlist = None
+    if getattr(args, "allow", None):
+        from alibi.allowlist import load_allowlist
+        try:
+            allowlist = load_allowlist(args.allow)
+        except Exception:
+            allowlist = None
+
+    v = assess(events, call, allowlist=allowlist)
+    if v.decision is Decision.ALLOW:
+        return 0
+    out.write(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny" if v.decision is Decision.BLOCK else "ask",
+        "permissionDecisionReason": f"Alibi: {v.reason}",
+    }}) + "\n")
+    return 0
 
 
 def _incidents(verdicts, args, out, err) -> int:
@@ -362,6 +417,9 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
             stream.reconfigure(errors="replace")  # a cp1252 console must not crash on "…"
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "hook":
+        return _hook(args, sys.stdin, out)
 
     if not args.results.is_file():
         print(f"alibi: results file not found: {args.results}", file=err)
