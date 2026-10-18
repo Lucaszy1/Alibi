@@ -89,10 +89,29 @@ _PASTED_BLOCK_RE = re.compile(r"<pasted_content[^>]*>.*?</pasted_content>", re.I
 _ZW_RE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060\ufeff]")
 
 
+# Common Cyrillic/Greek homoglyphs folded to their Latin look-alikes. A curated subset (the letters
+# actually abused in look-alike domains and injected words), not the full Unicode confusables table.
+_CONFUSABLES = str.maketrans({
+    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x",
+    "у": "y", "і": "i", "ј": "j", "ѕ": "s", "к": "k", "м": "m",
+    "н": "h", "т": "t", "в": "b", "г": "r",
+    "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "Х": "X",
+    "У": "Y", "І": "I", "Ѕ": "S", "К": "K", "М": "M", "Н": "H",
+    "Т": "T", "В": "B",
+    "ο": "o", "α": "a", "ρ": "p", "ε": "e", "κ": "k", "μ": "m",
+    "ν": "v", "τ": "t", "χ": "x", "ι": "i",
+    "Ο": "O", "Α": "A", "Ρ": "P", "Ε": "E", "Κ": "K", "Μ": "M",
+    "Ν": "N", "Τ": "T", "Χ": "X", "Ι": "I",
+})
+
+
 def _denoise(text: str) -> str:
-    """Canonicalise unicode (NFKC) and strip zero-width / bidi-control characters, so an injection
-    hidden with invisible characters or look-alike fullwidth glyphs still matches."""
-    return _ZW_RE.sub("", unicodedata.normalize("NFKC", text))
+    """Canonicalise unicode (NFKC), strip zero-width / bidi-control characters, and fold common
+    Cyrillic/Greek homoglyphs to their Latin look-alikes, so an injection or look-alike host hidden
+    with invisible characters, fullwidth glyphs, or confusable letters still matches."""
+    t = unicodedata.normalize("NFKC", text)
+    t = _ZW_RE.sub("", t)
+    return t.translate(_CONFUSABLES)
 
 
 def _user_intent(text: str) -> str:
