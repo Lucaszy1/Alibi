@@ -1,108 +1,125 @@
 ﻿# Known limitations and deferred work
 
 This file is the honest ledger for Alibi. Everything here is either an inherent limitation of the
-approach or a deliberately sequenced milestone, not a silent defect. The shipped code is tested
-(328 tests). Each item names how it will be addressed. These are tracked, not forgotten, and will
-be repaired as the dependent milestone lands, when the paper's evaluation forces the question, or
-immediately if one turns out to block real use.
+approach, a deliberate scope decision, or a sequenced milestone -- not a silent defect. The shipped
+code is tested (339 tests, ruff + mypy clean). Each item says how it is addressed or why it is left.
 
 ## A. Inherent limitations in shipped code
 
 Detection
-- Paraphrase / semantic laundering: recovered only via the local model tier; without a model a
-  paraphrased hijack is still flagged, but as UNJUSTIFIED rather than HIJACKED. Fix path: model
-  tier (done, partial) plus the anomaly tier (M-An) for the no-source case.
+- Attribution of laundered hijacks: a hijack whose injected instruction carries no distinctive token
+  (e.g. "create a scheduled task" with no host/path) cannot be proven by provenance, so it is still
+  flagged but as UNJUSTIFIED rather than HIJACKED. It is never silently allowed. The model tier
+  recovers it semantically when a local model is configured (and the model tier is strictly
+  non-exonerating -- see Robustness). This is the one benchmark miss.
 - Taint and provenance are token-overlap based; values transformed in ways not modeled (encryption,
   compression, char-code math, multi-file splitting, unobserved channels) can break the link.
 - Decoding covers base64, PowerShell -enc, hex, percent, string-concat, cross-call env vars,
-  gzip-in-base64, base32, and ROT13 (noisy transforms gated on a real indicator). Intentionally
-  omitted: brute-force single-byte XOR (a 256-key sweep over attacker-controlled blobs is a DoS
-  vector for little gain) and certutil/bitsadmin decode-to-file (handled by taint's via-file path).
-  Nested multi-layer encodings are now decoded recursively (bounded depth and total), and .NET
-  FromBase64String payloads are caught by the generic base64 scan. Still open: keyed or stateful
+  gzip-in-base64, base32, ROT13, and nested multi-layer combinations (recursive, bounded depth/total);
+  .NET FromBase64String is caught by the generic base64 scan. Intentionally omitted: brute-force
+  single-byte XOR (a 256-key sweep over attacker-controlled blobs is a DoS vector for little gain) and
+  certutil/bitsadmin decode-to-file (handled by taint's via-file path). Still open: keyed or stateful
   transforms (e.g. AES). Fix path: extend decode.py.
-- Policy tier keys off EDR MITRE tags, not command content, so an untagged technique is missed by
-  policy (provenance/taint may still catch). Fix path: optional decoded-content policy scan.
-- Target extraction uses a TLD allowlist, widened with common ccTLDs and abused newer gTLDs. It
-  stays an allowlist by design (so ordinary dotted words are not read as hosts; word-like TLDs such
-  as .to/.in/.it are deliberately excluded), and URLs always extract their host regardless of TLD, so
-  only a bare host on a very obscure TLD may still be missed. Local files whose extension is also a
-  gTLD (.sh/.zip/.app) are not misread as hosts.
-- Alert-to-call linking is time-window heuristic; clock skew or background processes can mislink.
+- Policy applies to both EDR MITRE tags and decoded command content: anchored command signatures
+  (cmdkey, schtasks /create, reg ...Run, Set-MpPreference -Disable, vssadmin delete, Get-Clipboard,
+  ...) catch an untagged sensitive action, and dual-use tokens (curl/wget) are deliberately excluded
+  so justified work is not false-flagged. It is still keyword/signature based, so a novel tool name or
+  an obfuscation the decoder does not model can evade the policy tier (provenance and taint may still
+  catch it).
+- Target extraction uses a TLD allowlist, widened with common ccTLDs and abused gTLDs; it stays an
+  allowlist by design (ordinary dotted words and word-like TLDs .to/.in/.it excluded), URLs always
+  extract their host regardless of TLD, and local files whose extension is also a gTLD (.sh/.zip/.app)
+  are not misread as hosts. A bare host on a very obscure TLD may still be missed.
+- Alert-to-call linking is a time-window heuristic; clock skew between the EDR and the transcript, or
+  a flood of background events, can mis-link or break linking. The window is configurable
+  (--window-seconds). Fix path: process-tree / PID-based linking where the EDR provides it.
+
+Robustness against tampering (Alibi judging attacker-influenced input)
+- Model tier is strictly non-exonerating: it may escalate an UNKNOWN to UNJUSTIFIED/HIJACKED or
+  strengthen an UNJUSTIFIED to HIJACKED, but can never clear a verdict to JUSTIFIED. A prompt
+  injection embedded in the untrusted content the model reads cannot talk the judge into allowing an
+  action. DONE.
+- Pasted / attached content inside a user message is excluded from justification matching, so an
+  attacker whose payload the user pasted cannot self-justify an action by having its target appear
+  "in the request". DONE.
+- Normalization folds unicode (NFKC), strips zero-width and bidi-control characters, and folds a
+  curated set of Cyrillic/Greek homoglyphs to Latin before matching, so invisible-character,
+  fullwidth, and common look-alike-letter evasion is canonicalized away. LIMIT: the confusables set is
+  a curated subset, not the full Unicode confusables database, and other scripts are not folded. Fix
+  path: a fuller table if a feed needs it.
+- Instruction-detection heuristics (the "instruction-like text" boost) are English-only, so a prompt
+  injection written in another language is not boosted -- but provenance and taint do not depend on
+  language, so such a hijack is still caught when it carries a distinctive target. Fix path:
+  multilingual instruction cues.
+- User turns in the transcript are trusted as the user's genuine intent (pasted blocks aside). An
+  attacker who could forge a real user-role message could manufacture justification; that is outside
+  the trust boundary (it would mean the session record itself is forged). Documented assumption.
+- reveal() is bounded (linear indicator regex, capped matches/tokens, size-limited gunzip, bounded
+  recursion) so hostile input cannot make the analyzer slow -- a ReDoS/DoS in Alibi would itself be a
+  vulnerability. DONE.
 
 Remediation
 - Blocking needs admin/sudo to apply (inherent): hostnames route to 0.0.0.0 in the hosts file, bare
-  IPs get a firewall rule (netsh on Windows, iptables/ip6tables on Linux, a pfctl anchor on macOS). DONE.
-- Reversals carry an argv vector built from validated parts, so an executor can run them shell-free
-  (shell=False); only genuinely shell-shaped reversals (hosts redirect, sc stop&delete chain) keep a
-  shell command and are flagged needs_shell. DONE.
-- Persistence reversals: schtasks/systemd/launchd and now Windows Run-key / sc.exe service /
-  startup-folder are automatic; cron and WMI event-subscription are manual by design (no single safe
-  command removes a WMI filter+consumer+binding together). DONE.
-- Quoted multi-word task or service names are safely withheld to manual review, not auto-parsed.
-- Undo: Alibi rolls back its own reversible containment (restore a quarantined file, remove a
-  firewall rule) via a serializable bundle, and never auto-undoes a persistence deletion (that would
-  reinstate the attacker's autostart). DONE, and surfaced through the CLI: `remediate --apply` writes
-  a rollback bundle and `alibi undo <bundle> --apply` reverts it.
+  IPs get a firewall rule (netsh on Windows, iptables/ip6tables on Linux, a pfctl anchor on macOS).
+- Reversals carry an argv vector built from validated parts for shell-free execution; only genuinely
+  shell-shaped reversals keep a shell command and are flagged needs_shell.
+- Persistence reversals: schtasks/systemd/launchd and Windows Run-key / sc.exe service /
+  startup-folder are automatic; cron and WMI event-subscription are manual by design.
+- Quoted multi-word task/service names are withheld to manual review, not auto-parsed.
+- Undo: Alibi rolls back its own reversible containment via a serializable bundle and never
+  auto-undoes a persistence deletion; `remediate --apply` writes the bundle, `alibi undo` reverts it.
+- Alibi never acts on its own: every reversal is behind a per-action human approval and a real
+  executor (no executor = dry run); the inline hook / MCP guardrail only returns allow/warn/block.
 
 Model, confidence, performance
-- The deterministic judge is now benchmarked (M15): 0.933 accuracy, 0.915 macro-F1 on the labeled
-  corpus, zero silent-allows and zero false-flags, with ablations and baselines showing each tier
-  earns its place (benchmark/REPORT.md). DONE.
-- Model-tier evaluation harness is in place: bench.model_tier_system(backend) runs the corpus through
-  the judge with a model tier attached, scored by the same metrics; a mock backend demonstrates it
-  recovers the laundered case (0.96 -> 1.0, and only ever strengthens a verdict). Actual accuracy
-  numbers need a local Ollama model at run time.
-- Confidence is now measured (alibi bench --calibration: reliability by confidence band), which shows
-  the values are not yet probability-calibrated (a high-confidence mis-attribution exists on the
-  laundered case). Full re-tuning needs a larger corpus. Measured; re-tuning deferred.
-- Taint uses a precomputed per-session TaintIndex (one pass, snapshot before each call), so a call's
-  taint resolves in O(tokens in the call) and the session is O(events) overall, not O(events x calls). DONE.
+- Deterministic judge benchmarked: 0.96 accuracy, 0.947 macro-F1 on the 25-case corpus, zero
+  silent-allows, zero false-flags, with ablations and baselines (benchmark/REPORT.md).
+- Model-tier evaluation harness in place (bench.model_tier_system); a mock backend shows it recovers
+  the laundered case. Real numbers need a local Ollama model at run time (practical on GPU hardware;
+  CPU-only runs are slow).
+- Confidence is measured (alibi bench --calibration) and is not yet probability-calibrated. Re-tuning
+  needs a larger corpus.
+- Taint uses a precomputed per-session TaintIndex: O(tokens) per call, O(events) per session.
 
 Privacy
-- Secret redaction in shared reports: DONE. redact.py masks credential values (keyed secrets, URL
-  credentials, Authorization/Bearer headers, AWS/GitHub/Slack tokens, PEM private-key blocks) and
-  report.py applies it through the _san sanitizer before truncation, so a secret can't be half-shown;
-  attack indicators (hosts, URLs, commands) are preserved by design. Scope decision: redaction covers
-  the report artifact (the output meant to be shared); scan/adjudicate stdout and --json are the
-  operator's own local view of their own machine and are intentionally left unredacted.
+- Secret redaction in shared reports (redact.py via report.py _san, before truncation) masks
+  credential values and known token shapes while preserving attack indicators; scan/adjudicate stdout
+  and --json are the operator's local view and are intentionally not redacted.
 
-## B. Deferred milestones (on the roadmap, not built)
+Evaluation methodology (important caveat)
+- The 0.96 figure is on a 25-case corpus authored for this project that the judge was partly tuned
+  against (e.g. the URL-coverage fix was found via a corpus miss). It demonstrates the mechanism and
+  guards against regressions; it is NOT an estimate of real-world accuracy. The anti-tampering
+  behaviors are covered by separate regression tests, not folded into the scored corpus, so they do
+  not inflate it. Fix path: a larger, independently-sourced corpus and a model-tier run on real
+  hardware before any performance claim in the paper.
 
-- M10 broader ingestion: DONE for the neutral layer. A documented neutral JSON/JSONL alert feed is
-  auto-detected and parsed (alerts.py), so any SIEM or EDR that can emit JSON feeds Alibi without a
-  bespoke parser; source classification is default-untrusted, so web-fetch, MCP, and subagent
-  results are already treated as attacker-controllable (locked by test_source_classification.py).
-  Elastic ECS and Splunk JSON are normalized directly (nested/vendor field names mapped to the
-  neutral shape). DEFERRED: binary EVTX / Windows Event Log (needs a parser dependency), auditd
-  text, and osquery epoch-time feeds, each a convenience layer on the neutral contract, not a
-  correctness gap. Fix path: per-format adapters added when a real feed needs one.
-- M11 allowlists: DONE. A trusted --allow file downgrades a flagged verdict to JUSTIFIED
-  (judge._apply_allowlist), keeping the original finding in the reason; tested.
-- M-An anomaly tier: DONE. A high-severity action with no external target and no tie to the
-  request is surfaced as UNKNOWN / ELEVATED for review (judge._anomaly) — the attack-agnostic
-  catch for a novel attack that leaves no other signal; tested.
-- M12 explainability: DONE (incident report artifact, Mermaid provenance graph, and secret
-  redaction in reports are all shipped and tested).
-- M13 remediation depth: DONE (IP/firewall blocking, Windows Run-key / service / startup-folder /
-  WMI handling, rollback bundle + undo, argv-style shell-free execution, and a macOS pfctl IP block).
-- M14 MCP server: DONE. A dependency-free stdio JSON-RPC MCP server (alibi mcp) exposes the inline
-  assess guardrail as an `assess` tool (allow / warn / block), alongside the shipped Claude Code hook.
-- M15 benchmark and evaluation: DONE for the deterministic judge (labeled paired corpus, confusion
-  matrix + precision/recall/F1, operational detection view, tier ablations, naive baselines, and an
-  `alibi bench` CLI writing benchmark/REPORT.md). Remaining deferred: model-tier evaluation and
-  confidence calibration; the corpus is synthetic-but-realistic and modest in size, to be expanded.
-- M16 paper. M17 vision (policy DSL, PyPI, docs site, public benchmark).
+## B. Milestones (status)
+
+- M10 ingestion: DONE for the neutral + vendor-JSON layer (neutral JSON/JSONL auto-detected; Elastic
+  ECS and Splunk field names normalized; default-untrusted source classification). DEFERRED: binary
+  EVTX / Windows Event Log (needs a parser dependency), auditd text, osquery epoch feeds -- convenience
+  layers, not correctness gaps.
+- M11 allowlists: DONE. M-An anomaly tier: DONE. M12 explainability: DONE.
+- M13 remediation depth: DONE (IP/firewall incl. macOS pf, Windows persistence, rollback+undo, argv).
+- M14 MCP server: DONE (dependency-free stdio JSON-RPC exposing the assess guardrail).
+- M15 benchmark: DONE for the deterministic judge (corpus, metrics, detection view, ablations,
+  baselines, calibration, model-tier harness, alibi bench CLI). See the evaluation caveat above.
+- M16 paper: not started (deliberately, until the tool is complete and a real-hardware eval is run).
+- M17 vision: not started -- policy DSL, PyPI publish, docs site, public benchmark. Mostly
+  publishing/packaging decisions rather than tool capability.
 
 ## C. Process and housekeeping
 
-- GitHub push, CI badge, and v1.0.0 tag deferred until a milestone worth showing.
-- LICENSE (MIT) and CHANGELOG added. DONE.
-- CI runs tests (Linux/macOS/Windows x py3.11/3.12) and a lint job (ruff + mypy), both enforced. DONE. Coverage gate still deferred.
-- Runs append a JSON history record (--state FILE), readable via `alibi history`; the judge stays stateless. DONE. Full verdict round-trip and cross-run incident correlation remain future work.
+- GitHub push, CI badge, v1.0.0 tag: deferred pending the owner's decision on remote + visibility.
+- LICENSE (MIT) and CHANGELOG: DONE.
+- CI: tests on Linux/macOS/Windows x py3.11/3.12 plus an enforced ruff + mypy lint job. Coverage gate
+  still deferred.
+- Run history: runs append a JSON record (--state FILE), readable via `alibi history`; the judge is
+  stateless. Full verdict round-trip and cross-run incident correlation remain future work.
 
 ## Commitment
 
-These are not closed by ignoring them. Every item is tied to a milestone and will be revisited when
-that milestone is built, when evaluation forces the question, or immediately if one blocks real use.
-This ledger is updated as items are closed.
+These are not closed by ignoring them. Every item is either done, a documented scope decision, or tied
+to a milestone, and is revisited when that milestone is built, when evaluation forces the question, or
+immediately if one blocks real use. This ledger is updated as items change.
