@@ -551,6 +551,7 @@ class Judge:
             return self._harness(alert, link)
 
         verdict, context = self._deterministic(alert, link)
+        verdict = self._anomaly(verdict, context)
         final = verdict
         if self.model_tier is not None:
             if verdict.verdict is VerdictKind.UNKNOWN:
@@ -568,6 +569,21 @@ class Judge:
         return self._apply_allowlist(final, alert, link)
 
     # -- harness -------------------------------------------------------------------------------
+
+    def _anomaly(self, v: Verdict, context: JudgeContext) -> Verdict:
+        """Attack-agnostic catch: a high-severity action the EDR flagged that we can only call
+        routine, with no external target and no tie to the request, is unexplained. Surface it as
+        a non-blocking review item, even with no untrusted source and no known technique. This is
+        the catch for a genuinely novel attack that leaves no other signal."""
+        if (v.disposition is Disposition.VERDICT and v.verdict is VerdictKind.JUSTIFIED
+                and v.confidence < 0.6
+                and context.alert.level.lower() in ("high", "crit", "critical")):
+            return replace(
+                v, verdict=VerdictKind.UNKNOWN, confidence=1.0, tier=Tier.POLICY, concern=Concern.ELEVATED,
+                reason=(f"High-severity action with no external target and no tie to the request; "
+                        f"unexplained, needs review (was: {v.reason})"),
+            )
+        return v
 
     def _apply_allowlist(self, v: Verdict, alert: Alert, link: LinkResult) -> Verdict:
         """A user-sanctioned target downgrades a flag to JUSTIFIED, keeping the original finding
