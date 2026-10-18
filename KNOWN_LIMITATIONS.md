@@ -21,7 +21,9 @@ Detection
   Still open: nested multi-layer encodings and .NET FromBase64 without -enc. Fix path: extend decode.py.
 - Policy tier keys off EDR MITRE tags, not command content, so an untagged technique is missed by
   policy (provenance/taint may still catch). Fix path: optional decoded-content policy scan.
-- Target extraction uses a fixed TLD allowlist; unusual or newer TLDs may not extract.
+- Target extraction uses a fixed TLD allowlist, so unusual or newer TLDs may not extract as bare
+  hosts (URLs always extract their host). Local files whose extension is also a gTLD (.sh/.zip/
+  .app) are no longer misread as hosts. Fix path for allowlist breadth: widen it as needed.
 - Alert-to-call linking is time-window heuristic; clock skew or background processes can mislink.
 
 Remediation

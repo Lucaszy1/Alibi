@@ -138,6 +138,16 @@ def _paths(text: str) -> set[str]:
     return out
 
 
+_FILE_EXT_TLD = {"sh", "zip", "app"}  # gTLDs that, in command text, are almost always file extensions
+
+
+def _looks_like_file(host: str) -> bool:
+    """A bare one-dot token whose extension is a file-extension gTLD (s.sh, backup.zip, My.app) is a
+    local file, not a host. URL hosts never reach this check, so a real http://host.sh is unaffected."""
+    parts = host.split(".")
+    return len(parts) == 2 and parts[-1] in _FILE_EXT_TLD
+
+
 def extract_targets(text: str) -> set[Target]:
     """Distinctive things an action touches: paths, URLs, hosts, IPs, installed packages."""
     targets: set[Target] = set()
@@ -148,7 +158,9 @@ def extract_targets(text: str) -> set[Target]:
         targets.add(Target(TargetKind.HOST, host))
     without_urls = _URL_RE.sub(" ", text)
     for m in _HOST_RE.finditer(without_urls):
-        targets.add(Target(TargetKind.HOST, m.group(0).lower()))
+        host = m.group(0).lower()
+        if not _looks_like_file(host):
+            targets.add(Target(TargetKind.HOST, host))
     for m in _IP_RE.finditer(without_urls):
         targets.add(Target(TargetKind.IP, m.group(0)))
     for p in _paths(without_urls):
