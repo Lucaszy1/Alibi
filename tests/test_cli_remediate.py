@@ -47,7 +47,7 @@ def test_apply_runs_after_yes(monkeypatch):
     monkeypatch.setattr(builtins, "input", lambda *a, **k: "y")
     out, err = io.StringIO(), io.StringIO()
     code = _remediate([_sched_verdict()], _Args(True), out, err)
-    assert ran and "schtasks /delete" in ran[0]
+    assert ran and "schtasks" in ran[0] and "/delete" in ran[0]  # argv form, shell-free
     assert "applied" in out.getvalue() and code == 1
 
 

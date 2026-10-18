@@ -345,7 +345,8 @@ def plan_remediations(verdicts, target_os: str | None = None) -> list:
     return out
 
 
-def apply_remediations(remediations, approver: Callable, executor: Callable | None = None) -> list:
+def apply_remediations(remediations, approver: Callable, executor: Callable | None = None,
+                       allow_shell: bool = True) -> list:
     """Run each remediation ONLY if the approver says yes and an executor is supplied.
 
     approver is asked per item; a falsey answer leaves it untouched. With no executor an approved
@@ -355,6 +356,9 @@ def apply_remediations(remediations, approver: Callable, executor: Callable | No
     for r in remediations:
         if not r.automatic:
             results.append((r, "manual"))
+            continue
+        if r.needs_shell and not allow_shell:
+            results.append((r, "refused-no-shell"))
             continue
         if not approver(r):
             results.append((r, "declined"))
@@ -438,13 +442,16 @@ def bundle_to_json(steps) -> str:
     return json.dumps([asdict(s) for s in steps], indent=2)
 
 
-def apply_undo(steps, approver, executor=None) -> list:
+def apply_undo(steps, approver, executor=None, allow_shell=True) -> list:
     """Run undo steps under the same consent gate as apply_remediations: a manual step or one with
     no command is never executed; others run only on an explicit yes AND a real executor."""
     results = []
     for s in steps:
         if s.manual or s.command is None:
             results.append((s, "manual"))
+            continue
+        if s.needs_shell and not allow_shell:
+            results.append((s, "refused-no-shell"))
             continue
         if not approver(s):
             results.append((s, "declined"))

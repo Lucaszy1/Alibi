@@ -38,6 +38,12 @@ _COLORS = {"HIJACKED": "1;31", "UNJUSTIFIED": "31", "UNKNOWN": "33", "HARNESS/EL
            "JUSTIFIED": "32", "HARNESS/LOW": "2", "STAND_ASIDE": "2"}
 
 
+def _is_loopback(url: str) -> bool:
+    from urllib.parse import urlparse
+    host = (urlparse(url if "://" in url else "//" + url).hostname or "").lower()
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
 def default_projects_dir() -> Path:
     return Path.home() / ".claude" / "projects"
 
@@ -217,6 +223,8 @@ def _add_common_args(sp) -> None:
                     help="cap model adjudications (default 50)")
     sp.add_argument("--state", type=Path, default=None, metavar="FILE",
                     help="append a JSON record of this run to FILE (durable history across runs)")
+    sp.add_argument("--allow-remote-model", action="store_true",
+                    help="permit a non-loopback --ollama-host (default: only 127.0.0.1/localhost allowed)")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -248,6 +256,8 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="target OS for generated reversal commands (default: the machine running alibi)")
     rem.add_argument("--undo-out", type=Path, default=None, metavar="FILE",
                      help="on --apply, write a rollback bundle here to revert later (default alibi-undo.json)")
+    rem.add_argument("--no-shell", action="store_true",
+                     help="refuse any reversal that needs a shell; only shell-free argv reversals run")
 
     inc = sub.add_parser("incidents", help="group flagged verdicts from one intrusion into correlated incidents")
     _add_common_args(inc)
@@ -435,10 +445,14 @@ def _remediate(verdicts, args, out, err) -> int:
 
     def executor(r) -> None:
         import subprocess
-        err.write(f"  running: {r.command}\n")
-        subprocess.run(r.command, shell=True, check=False)
+        if r.argv is not None:
+            err.write(f"  running (no shell): {' '.join(r.argv)}\n")
+            subprocess.run(list(r.argv), shell=False, check=False)
+        else:
+            err.write(f"  running: {r.command}\n")
+            subprocess.run(r.command, shell=True, check=False)
 
-    results = apply_remediations(rems, approver, executor)
+    results = apply_remediations(rems, approver, executor, allow_shell=not getattr(args, "no_shell", False))
     if args.json:
         for r, status in results:
             out.write(json.dumps(_remediation_to_json(r, status)) + "\n")
@@ -546,6 +560,11 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
             stream.reconfigure(errors="replace")  # a cp1252 console must not crash on "…"
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if (getattr(args, "model", None) and not getattr(args, "allow_remote_model", False)
+            and not _is_loopback(getattr(args, "ollama_host", "") or "")):
+        print("alibi: refusing a non-loopback --ollama-host without --allow-remote-model (the model tier "
+              "reads attacker-influenced content, so keep it on localhost).", file=err)
+        return 2
 
     if args.command == "hook":
         return _hook(args, sys.stdin, out)
