@@ -1,7 +1,7 @@
 ﻿"""Remediation layer: concrete reversals proposed per flagged verdict, and an approval gate that
 never executes without an explicit yes and a real executor."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
@@ -9,7 +9,7 @@ from alibi.remediate import apply_remediations, plan_remediations
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _verdict(kind, reason, command="", tool="Bash", techniques=(), event_id=1, rule_title="rule", file_path=None, ts=TS):

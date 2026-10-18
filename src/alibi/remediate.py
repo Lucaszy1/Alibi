@@ -11,8 +11,8 @@ import ipaddress
 import json
 import re
 import sys
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
-from typing import Callable
 
 from alibi.verdict import Disposition, Verdict, VerdictKind
 

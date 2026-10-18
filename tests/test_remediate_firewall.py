@@ -2,7 +2,7 @@
 hosts-file entry only affects name resolution and does nothing for an IP. Hostnames keep the hosts
 path. IPs come from ipaddress parsing, so they are metacharacter-free by construction."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
@@ -10,7 +10,7 @@ from alibi.remediate import plan_remediations
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _v(cmd, reason):

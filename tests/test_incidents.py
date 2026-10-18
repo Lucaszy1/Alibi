@@ -1,7 +1,7 @@
 ﻿"""Correlation groups a same-host burst of flagged verdicts into one incident, and keeps separate
 intrusions, distant-in-time flags, and clean verdicts apart."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.incidents import correlate
@@ -9,7 +9,7 @@ from alibi.link import LinkResult
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _v(kind, secs, computer="PC-1", techniques=()):

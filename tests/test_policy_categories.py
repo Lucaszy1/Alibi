@@ -3,14 +3,14 @@
 A sensitive technique the user never asked for is UNJUSTIFIED; the same action the user did ask
 for is not flagged. These fire on the deterministic tier, no model needed."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _judge(prompt, command, techniques):

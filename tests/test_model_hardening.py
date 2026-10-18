@@ -1,15 +1,15 @@
 ﻿"""The judge model cannot be steered: it never overrides a deterministic flag, and untrusted
 endpoint data cannot forge or close the prompt fence it is quarantined inside."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
-from alibi.model_tier import CachingModelTier, _neutralize, _FENCE_END
+from alibi.model_tier import _FENCE_END, CachingModelTier, _neutralize
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import Tier, VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 
 

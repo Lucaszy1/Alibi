@@ -1,12 +1,12 @@
 ﻿"""Taint engine: untrusted data flowing into a dangerous call, directly, via base64, or through a
 dropped file; and staying clean when the argument is the user's or the result came later."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.taint import trace_taint
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\proj"
 
 

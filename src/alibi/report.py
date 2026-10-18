@@ -5,9 +5,9 @@ the proposed reversals. Pure; builds on incidents.correlate and remediate.plan_r
 from __future__ import annotations
 
 from alibi.incidents import correlate
+from alibi.redact import redact
 from alibi.remediate import plan_remediations
 from alibi.verdict import EvidenceSource
-from alibi.redact import redact
 
 _FENCE = chr(96) * 3
 

@@ -2,7 +2,7 @@
 automatic reversals (targets validated, unsafe names withheld to manual); WMI subscriptions are
 manual by design because no single safe command removes the filter, consumer, and binding together."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
@@ -10,7 +10,7 @@ from alibi.remediate import plan_remediations
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _v(cmd, reason="persistence the user never asked for"):

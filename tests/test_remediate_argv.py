@@ -3,7 +3,7 @@ validated parts, so an executor can run it with shell=False and metacharacters a
 impossible. Reversals that truly need a shell (hosts-file redirect, sc stop&delete chain) expose
 argv=None and needs_shell=True instead of a fabricated vector."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
@@ -11,7 +11,7 @@ from alibi.remediate import apply_remediations, plan_remediations, rollback_bund
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 _META = set("|&;<>$()`\n\r")
 
 

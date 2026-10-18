@@ -2,7 +2,7 @@
 instruction to the action. The deterministic tiers still flag it (the target is unrequested), but
 as UNJUSTIFIED; the model tier recovers the HIJACKED attribution and can never clear the flag."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
@@ -10,7 +10,7 @@ from alibi.model_tier import CachingModelTier
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 
 
@@ -19,7 +19,7 @@ class _Says:
         self.v = verdict
 
     def complete(self, prompt):
-        return '{"verdict": "%s", "confidence": 0.9, "reason": "semantic read of the untrusted note"}' % self.v
+        return f'{{"verdict": "{self.v}", "confidence": 0.9, "reason": "semantic read of the untrusted note"}}'
 
 
 def _events_and_alert():

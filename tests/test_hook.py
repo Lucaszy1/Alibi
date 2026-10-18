@@ -4,7 +4,6 @@ sensitive call, stays silent on a clean one, and fails open on garbage."""
 import io
 import json
 from types import SimpleNamespace
-from pathlib import Path
 
 from alibi.cli import _hook
 

@@ -3,16 +3,15 @@ firewall rules), but never auto-undoes a persistence deletion (that would reinst
 autostart), and a dry run leaves nothing to undo. restore_files is destructive and is not reversible."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
-from alibi.remediate import (apply_remediations, apply_undo, bundle_to_json,
-                             plan_remediations, rollback_bundle)
+from alibi.remediate import apply_remediations, apply_undo, bundle_to_json, plan_remediations, rollback_bundle
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _v(cmd, reason, tool="Bash", file_path=None):

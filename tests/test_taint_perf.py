@@ -1,13 +1,13 @@
 ﻿"""Taint is computed once per distinct call, even when many alerts link to that same command."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import alibi.judge as J
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 
 

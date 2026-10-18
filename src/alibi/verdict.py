@@ -4,27 +4,27 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum, IntEnum
+from enum import IntEnum, StrEnum
 
 from alibi.alerts import Alert
 from alibi.link import LinkResult
 from alibi.transcript import ToolCall
 
 
-class VerdictKind(str, Enum):
+class VerdictKind(StrEnum):
     JUSTIFIED = "JUSTIFIED"      # the user's request covers this action
     UNJUSTIFIED = "UNJUSTIFIED"  # no request covers it, and no sign of outside influence
     HIJACKED = "HIJACKED"        # traces to untrusted content the user never asked for
     UNKNOWN = "UNKNOWN"          # agent-caused, but the deterministic tiers can't call it
 
 
-class Disposition(str, Enum):
+class Disposition(StrEnum):
     VERDICT = "VERDICT"          # an agent action: carries a user-facing VerdictKind
     HARNESS = "HARNESS"          # Claude Code's own activity: no user request to judge against
     STAND_ASIDE = "STAND_ASIDE"  # not the agent: Alibi has nothing to say
 
 
-class Concern(str, Enum):
+class Concern(StrEnum):
     """How suspect a HARNESS disposition is. Harness activity is never JUSTIFIED by a request."""
 
     LOW = "LOW"            # expected infrastructure: API traffic, config writes, shell setup
@@ -38,7 +38,7 @@ class Tier(IntEnum):
     MODEL = 4       # local model (not yet wired up)
 
 
-class EvidenceSource(str, Enum):
+class EvidenceSource(StrEnum):
     USER_PROMPT = "USER_PROMPT"
     UNTRUSTED_RESULT = "UNTRUSTED_RESULT"
     TOOL_CALL = "TOOL_CALL"

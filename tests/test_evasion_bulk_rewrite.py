@@ -1,14 +1,14 @@
 ﻿"""Refactor vs ransomware: a burst of file rewrites the user never licensed is flagged UNJUSTIFIED,
 but the same burst stays clean when the request asks for a bulk operation."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 CLAUDE = r"C:\Users\user\AppData\Local\Programs\claude\claude.exe"
 

@@ -1,7 +1,7 @@
 ﻿"""Live testing with a 3B model showed it crying HIJACKED with no untrusted source. The tier
 downgrades that to UNJUSTIFIED: the HIJACKED label must trace to untrusted content."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.judge import JudgeContext
@@ -10,7 +10,7 @@ from alibi.model_tier import CachingModelTier, StubBackend
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 HIJACK_JSON = '{"verdict": "HIJACKED", "confidence": 0.8, "reason": "x"}'
 
 

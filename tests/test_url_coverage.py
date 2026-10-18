@@ -3,7 +3,6 @@ counted as covered, so a requested upload is JUSTIFIED rather than UNKNOWN. Guar
 slash-collapse mismatch that previously left named URLs 'uncovered'."""
 
 import json
-from pathlib import Path
 
 from alibi.alerts import load_alerts
 from alibi.judge import Judge

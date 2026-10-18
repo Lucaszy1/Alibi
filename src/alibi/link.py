@@ -24,10 +24,10 @@ from __future__ import annotations
 import base64
 import binascii
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import Enum
-from typing import Iterable
+from enum import StrEnum
 
 from alibi.alerts import Alert
 from alibi.transcript import Event, ToolCall, ToolResult
@@ -55,7 +55,7 @@ _GENERIC_TOKENS = frozenset(
 )
 
 
-class Origin(str, Enum):
+class Origin(StrEnum):
     AGENT_ACTION = "AGENT_ACTION"    # caused by a tool call
     AGENT_HARNESS = "AGENT_HARNESS"  # caused by Claude Code itself, not by what it was asked to do
     UNRELATED = "UNRELATED"          # not the agent; Alibi stands aside

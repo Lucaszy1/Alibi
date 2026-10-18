@@ -1,7 +1,7 @@
 """Linker tests: synthetic cases built from real command-line shapes, plus a real-data run."""
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,7 +16,7 @@ from alibi.link import (
 )
 from alibi.transcript import ToolCall, ToolResult, UserPrompt, load_transcript
 
-T0 = datetime(2026, 10, 16, 18, 0, 0, tzinfo=timezone.utc)
+T0 = datetime(2026, 10, 16, 18, 0, 0, tzinfo=UTC)
 CLAUDE = r"C:\Users\user\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe"
 BASH = r"C:\Program Files\Git\bin\bash.exe"
 PYTHON = r"C:\Users\user\AppData\Local\Programs\Python\Python312\python.exe"

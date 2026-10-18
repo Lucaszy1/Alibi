@@ -5,14 +5,14 @@ disk. The Write lands a script naming the exfil host telemetry-collect.dev. Prov
 the written content, finds a target the user never asked for that traces to the untrusted README,
 and fires HIJACKED, even though the file sits in the workspace."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 HOST = "telemetry-collect.dev"
 CWD = r"C:\victim-repo"
 DROPPED = CWD + r"\setup_check.py"

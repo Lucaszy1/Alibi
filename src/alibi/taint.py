@@ -14,9 +14,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from alibi.transcript import ToolCall, ToolResult
-from alibi.transcript import SourceKind
 from alibi.decode import reveal
+from alibi.transcript import SourceKind, ToolCall, ToolResult
 
 _URL = re.compile(r"https?://[^\s'\"<>|`)]+", re.I)
 _IP = re.compile(r"(?<![\d.])(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?![\d.])")

@@ -4,11 +4,11 @@ the linking window), not when a tool call precedes the alert it caused by a frac
 import csv
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.cli import main
 
-BASE = datetime(2026, 10, 16, 18, 0, 0, tzinfo=timezone.utc)
+BASE = datetime(2026, 10, 16, 18, 0, 0, tzinfo=UTC)
 
 
 def _csv_ts(dt):

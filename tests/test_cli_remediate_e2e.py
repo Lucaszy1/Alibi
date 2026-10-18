@@ -4,11 +4,11 @@ An unrequested file-write burst yields proposals and exit 1; the same burst aske
 import csv
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.cli import main
 
-BASE = datetime(2026, 10, 16, 18, 0, 0, tzinfo=timezone.utc)
+BASE = datetime(2026, 10, 16, 18, 0, 0, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 
 

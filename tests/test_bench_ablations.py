@@ -6,9 +6,17 @@ over-flag justified-but-dangerous actions because they ignore provenance entirel
 
 from pathlib import Path
 
-from alibi.bench import (alert_level_baseline, detection, evaluate_system, full_system,
-                         keyword_baseline, load_corpus, no_policy_system, no_provenance_system,
-                         predict)
+from alibi.bench import (
+    alert_level_baseline,
+    detection,
+    evaluate_system,
+    full_system,
+    keyword_baseline,
+    load_corpus,
+    no_policy_system,
+    no_provenance_system,
+    predict,
+)
 
 ROOT = Path(__file__).resolve().parent.parent / "benchmark" / "corpus"
 

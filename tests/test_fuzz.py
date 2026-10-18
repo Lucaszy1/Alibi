@@ -2,7 +2,6 @@
 gracefully (a controlled exception or a sane return), never hang or crash the interpreter."""
 
 import random
-from pathlib import Path
 
 from alibi.alerts import load_alerts
 from alibi.decode import reveal
@@ -47,8 +46,10 @@ def test_random_bytes_do_not_break_loaders(tmp_path):
     rnd = random.Random(1337)
     for i in range(150):
         blob = bytes(rnd.randrange(256) for _ in range(rnd.randint(0, 400)))
-        pj = tmp_path / f"r{i}.jsonl"; pj.write_bytes(blob)
-        pc = tmp_path / f"r{i}.csv"; pc.write_bytes(blob)
+        pj = tmp_path / f"r{i}.jsonl"
+        pj.write_bytes(blob)
+        pc = tmp_path / f"r{i}.csv"
+        pc.write_bytes(blob)
         for loader, path in ((load_transcript, pj), (load_alerts, pc)):
             try:
                 assert isinstance(loader(path), list)

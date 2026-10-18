@@ -14,15 +14,16 @@ from __future__ import annotations
 
 import posixpath
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from enum import Enum
-from typing import Iterable, Protocol
+from enum import StrEnum
+from typing import Protocol
 
 from alibi.alerts import Alert
+from alibi.decode import reveal
 from alibi.link import DEFAULT_WINDOW_SECONDS, LinkResult, Origin, link_alert, link_alerts
 from alibi.taint import trace_taint
-from alibi.decode import reveal
 from alibi.transcript import Event, SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import (
     Concern,
@@ -105,7 +106,7 @@ def _norm_path(p: str) -> str:
     return p.rstrip("/").lower()
 
 
-class TargetKind(str, Enum):
+class TargetKind(StrEnum):
     PATH = "path"
     URL = "url"
     HOST = "host"
@@ -244,7 +245,7 @@ def _excerpt(text: str, index: int, radius: int = EXCERPT_RADIUS) -> str:
 # Policy (tier 3)
 
 
-class PolicyLevel(str, Enum):
+class PolicyLevel(StrEnum):
     STRICT = "STRICT"      # not mentioned -> UNJUSTIFIED
     ESCALATE = "ESCALATE"  # not mentioned -> UNKNOWN (defer)
 

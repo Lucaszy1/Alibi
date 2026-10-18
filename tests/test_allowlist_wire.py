@@ -3,7 +3,7 @@ end to end through the CLI --allow option on the real hijack fixture."""
 
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from alibi.alerts import Alert
@@ -13,7 +13,7 @@ from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 FIX = Path(__file__).parent / "fixtures"
 

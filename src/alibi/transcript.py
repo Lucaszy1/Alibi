@@ -15,14 +15,15 @@ from __future__ import annotations
 
 import bisect
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Any, Iterable, Union
+from typing import Any
 
 
-class SourceKind(str, Enum):
+class SourceKind(StrEnum):
     TRUSTED = "TRUSTED"
     UNTRUSTED = "UNTRUSTED"
 
@@ -70,7 +71,7 @@ class ToolResult:
     source_kind: SourceKind
 
 
-Event = Union[UserPrompt, ToolCall, ToolResult]
+Event = UserPrompt | ToolCall | ToolResult
 
 
 def classify_source(tool_name: str | None) -> SourceKind:

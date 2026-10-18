@@ -7,7 +7,7 @@ all call assess()."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 from alibi.decode import reveal
 from alibi.judge import POLICY_CATEGORIES
@@ -15,7 +15,7 @@ from alibi.taint import trace_taint
 from alibi.transcript import ToolCall, UserPrompt
 
 
-class Decision(str, Enum):
+class Decision(StrEnum):
     ALLOW = "allow"
     WARN = "warn"
     BLOCK = "block"

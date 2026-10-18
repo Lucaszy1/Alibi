@@ -1,14 +1,14 @@
 ﻿"""Taint tracking through the full judge: executing a file the agent wrote from untrusted content
 is a hijack even though no untrusted string appears in the final command; benign work is untouched."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import Tier, VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\victim-repo"
 
 

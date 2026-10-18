@@ -19,9 +19,10 @@ import json
 import os
 import sys
 from collections import Counter
-from datetime import timezone
+from collections.abc import Iterable
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Iterable, TextIO
+from typing import Any, TextIO
 
 from alibi.alerts import load_alerts
 from alibi.judge import Judge
@@ -169,7 +170,7 @@ def render_human(verdicts: list[Verdict], shown: list[Verdict], out: TextIO, sty
     groups = sorted(_group(shown), key=lambda g: (_RANK.get(g[0].label, 9), -g[0].confidence, g[0].alert.timestamp))
     for g in groups:
         v = g[0]
-        ts = v.alert.timestamp.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+        ts = v.alert.timestamp.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%SZ")
         head = style(f"{v.label:<11}", _COLORS.get(v.label, "")) + f" {v.confidence:.2f}  {ts}  tier {v.tier.value} ({v.tier.name.lower()})"
         print(f"\n{head}", file=out)
         rules = Counter(x.alert.rule_title for x in g)
@@ -300,7 +301,7 @@ def _hook(args, in_stream, out) -> int:
     """Claude Code PreToolUse hook: read the proposed call on stdin, judge it against the session,
     and deny or ask when it looks like a hijack or an unrequested sensitive action. Silent on allow,
     so the normal permission flow is untouched. Fails open: never blocks on its own errors."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from alibi.inline import Decision, assess
     from alibi.transcript import ToolCall
@@ -324,7 +325,7 @@ def _hook(args, in_stream, out) -> int:
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
         tool_input = {}
-    call = ToolCall(datetime.now(timezone.utc), str(payload.get("tool_use_id") or "candidate"),
+    call = ToolCall(datetime.now(UTC), str(payload.get("tool_use_id") or "candidate"),
                     str(payload.get("tool_name") or ""), tool_input, payload.get("cwd"))
 
     allowlist = None

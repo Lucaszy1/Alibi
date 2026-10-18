@@ -1,13 +1,13 @@
 ﻿"""The inline guardrail blocks a taint-derived call, warns on an unrequested sensitive call, and
 allows requested or benign work, with an allowlist override."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.allowlist import Allowlist
 from alibi.inline import Decision, assess
 from alibi.transcript import SourceKind, ToolCall, ToolResult, UserPrompt
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\proj"
 
 

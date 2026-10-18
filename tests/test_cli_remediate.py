@@ -5,6 +5,7 @@ import builtins
 import io
 import json
 import subprocess
+from datetime import UTC, datetime
 
 from alibi.alerts import Alert
 from alibi.cli import _remediate
@@ -12,9 +13,7 @@ from alibi.link import LinkResult
 from alibi.transcript import ToolCall
 from alibi.verdict import Disposition, Tier, Verdict, VerdictKind
 
-from datetime import datetime, timezone
-
-TS = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class _Args:

@@ -1,14 +1,14 @@
 ﻿"""The anomaly tier surfaces a high-severity action with no tie to the request as unexplained for
 review, but leaves an explicitly-requested action and a low-severity one alone."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from alibi.alerts import Alert
 from alibi.judge import Judge
 from alibi.transcript import ToolCall, UserPrompt
 from alibi.verdict import VerdictKind
 
-T = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T = datetime(2026, 1, 1, tzinfo=UTC)
 CWD = r"C:\proj"
 
 

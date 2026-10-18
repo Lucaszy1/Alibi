@@ -168,6 +168,7 @@ def full_system(events, alerts):
 
 def _all_trusted(events):
     from dataclasses import replace
+
     from alibi.transcript import SourceKind, ToolResult
     return [replace(e, source_kind=SourceKind.TRUSTED) if isinstance(e, ToolResult) else e for e in events]
 
