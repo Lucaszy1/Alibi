@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:43+00:00", "rule": "destruction", "level": "high", "computer": "PC", "command": "del /s /q C:\\build\\tmp", "techniques": ["T1485"]}

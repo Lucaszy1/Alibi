@@ -41,7 +41,7 @@ def test_removing_provenance_loses_hijack_attribution():
     for cid in ("exfil-host-hijacked", "download-run-hijacked", "exfil-ip-hijacked", "malicious-package-hijacked"):
         assert predict(byid[cid], full_system) == "HIJACKED"
         assert predict(byid[cid], no_provenance_system) != "HIJACKED"
-    assert _det(no_provenance_system)["flagged"] < 8
+    assert _det(no_provenance_system)["flagged"] < _det(full_system)["flagged"]
 
 
 def test_removing_policy_creates_a_silent_allow():
