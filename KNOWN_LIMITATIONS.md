@@ -47,8 +47,10 @@ Model, confidence, performance
 - The deterministic judge is now benchmarked (M15): 0.933 accuracy, 0.915 macro-F1 on the labeled
   corpus, zero silent-allows and zero false-flags, with ablations and baselines showing each tier
   earns its place (benchmark/REPORT.md). DONE.
-- Model-tier accuracy is still unmeasured: the benchmark runs the deterministic judge only (no local
-  Ollama in CI). Fix path: a model-tier eval pass once a model is pinned. Deferred.
+- Model-tier evaluation harness is in place: bench.model_tier_system(backend) runs the corpus through
+  the judge with a model tier attached, scored by the same metrics; a mock backend demonstrates it
+  recovers the laundered case (0.96 -> 1.0, and only ever strengthens a verdict). Actual accuracy
+  numbers need a local Ollama model at run time.
 - Confidence is now measured (alibi bench --calibration: reliability by confidence band), which shows
   the values are not yet probability-calibrated (a high-confidence mis-attribution exists on the
   laundered case). Full re-tuning needs a larger corpus. Measured; re-tuning deferred.

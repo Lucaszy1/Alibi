@@ -292,3 +292,13 @@ def calibration_report(corpus) -> str:
     for r in rows:
         out.append(f"| [{r['lo']:.2f}, {min(r['hi'], 1.0):.2f}] | {r['n']} | {r['accuracy']:.3f} | {r['mean_confidence']:.3f} |")
     return "\n".join(out) + "\n"
+
+
+def model_tier_system(backend):
+    """A judge-with-model system for the benchmark: the same corpus, scored the same way, but with a
+    model tier attached. backend is any ModelTier -- a local Ollama backend at run time, or a stub in
+    tests -- so the model's contribution over the deterministic judge is measurable."""
+    def system(events, alerts):
+        from alibi.judge import Judge
+        return _labels(Judge(events, model_tier=backend).judge_all(alerts))
+    return system
