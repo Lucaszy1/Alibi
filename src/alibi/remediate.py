@@ -30,10 +30,15 @@ class Remediation:
     target: str | None = None
     reversible: bool = False     # whether the reversal itself can be undone (quarantine, git restore)
     manual: bool = True          # True => Alibi cannot do it automatically
+    argv: tuple | None = None    # shell-free argument vector from validated parts; None => needs a shell
 
     @property
     def automatic(self) -> bool:
         return not self.manual and self.command is not None
+
+    @property
+    def needs_shell(self) -> bool:
+        return self.argv is None and self.command is not None
 
 
 _CRED_CMD_RE = re.compile(r"(cmdkey|vaultcmd|secretsdump|mimikatz|lsass|/\.aws/credentials|/\.ssh/id_|\.netrc|security find-generic-password)", re.I)
@@ -104,7 +109,8 @@ def _win_persistence(v, cmd):
         if _SAFE_KEY_RE.match(key):
             return Remediation(v, "delete_run_key",
                                f"Delete the Run-key autostart entry '{name}' the agent added under {key}.",
-                               command=f'reg delete "{key}" /v "{name}" /f', target=name, manual=False)
+                               command=f'reg delete "{key}" /v "{name}" /f', target=name, manual=False,
+                               argv=("reg", "delete", key, "/v", name, "/f"))
         return Remediation(v, "manual_review",
                            "Run-key persistence detected but the registry path looks unsafe to auto-edit; remove it manually.",
                            manual=True)
@@ -118,10 +124,11 @@ def _win_persistence(v, cmd):
     if m:
         path = m.group(1).strip().strip('"')
         stamp = v.alert.timestamp.strftime("%Y%m%d%H%M%S")
+        dest = f"{path}.{stamp}.alibi-quarantine"
         return Remediation(v, "quarantine_file",
                            f"Quarantine the autostart file dropped in the Startup folder ({path}).",
-                           command=f'move "{path}" "{path}.{stamp}.alibi-quarantine"', target=path,
-                           reversible=True, manual=False)
+                           command=f'move "{path}" "{dest}"', target=path,
+                           reversible=True, manual=False, argv=("move", path, dest))
     if _WMI_RE.search(cmd):
         return Remediation(v, "review_wmi",
                            "WMI event-subscription persistence detected. Removing it safely means deleting the "
@@ -141,7 +148,8 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
         if name:
             return Remediation(v, "delete_scheduled_task",
                                f"Delete the scheduled task '{name}' the agent created.",
-                               command=f'schtasks /delete /tn "{name}" /f', target=name, manual=False)
+                               command=f'schtasks /delete /tn "{name}" /f', target=name, manual=False,
+                               argv=("schtasks", "/delete", "/tn", name, "/f"))
 
     win = _win_persistence(v, cmd)
     if win is not None:
@@ -152,12 +160,14 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
     if "launchctl" in low and plist:
         return Remediation(v, "unload_launch_agent",
                            f"Unload and remove the launch agent the agent installed ({plist}).",
-                           command=f'launchctl unload "{plist}"', target=plist, manual=False)
+                           command=f'launchctl unload "{plist}"', target=plist, manual=False,
+                           argv=("launchctl", "unload", plist))
     unit = _systemd_unit(cmd)
     if unit:
         return Remediation(v, "disable_service",
                            f"Disable and stop the systemd service the agent installed ({unit}).",
-                           command=f"systemctl disable --now {unit}", target=unit, manual=False)
+                           command=f"systemctl disable --now {unit}", target=unit, manual=False,
+                           argv=("systemctl", "disable", "--now", unit))
     if "crontab" in low or "/etc/cron" in low:
         return Remediation(v, "review_cron",
                            "Review the crontab (crontab -l) or /etc/cron.* and remove the entry the agent added; "
@@ -172,13 +182,14 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
         return Remediation(v, "quarantine_file",
                            f"Quarantine the file the agent wrote ({path}) by moving it aside.",
                            command=f'{mv} "{path}" "{dest}"', target=path,
-                           reversible=True, manual=False)
+                           reversible=True, manual=False, argv=(mv, path, dest))
 
     if "files rewritten" in reason:
         return Remediation(v, "restore_files",
                            "Restore the rewritten files from version control (git restore) or a backup. "
                            "This discards the agent's edits and cannot be undone by Alibi.",
-                           command="git restore .", reversible=False, manual=False)
+                           command="git restore .", reversible=False, manual=False,
+                           argv=("git", "restore", "."))
 
     is_cred = bool(_CRED_CMD_RE.search(cmd))
     is_exfil = ("targets host" in reason or "exfiltrat" in reason
@@ -244,12 +255,15 @@ def _extra(v, os_name):
     if _is_ip(host):
         if os_name == "windows":
             blk = f'netsh advfirewall firewall add rule name="Alibi block {host}" dir=out action=block remoteip={host}'
+            argv = ("netsh", "advfirewall", "firewall", "add", "rule",
+                    f"name=Alibi block {host}", "dir=out", "action=block", f"remoteip={host}")
         else:
             tool = "ip6tables" if _is_ipv6(host) else "iptables"
             blk = f"sudo {tool} -A OUTPUT -d {host} -j DROP"
+            argv = ("sudo", tool, "-A", "OUTPUT", "-d", host, "-j", "DROP")
         return [Remediation(v, "block_ip",
                             f"Block the exfiltration IP {host} outbound with a firewall rule.",
-                            command=blk, target=host, reversible=True, manual=False)]
+                            command=blk, target=host, reversible=True, manual=False, argv=argv)]
     if os_name == "windows":
         blk = rf"echo 0.0.0.0 {host} >> %SystemRoot%\System32\drivers\etc\hosts"
     else:
@@ -292,11 +306,11 @@ def _harden(rem):
     cmd = _command(rem.verdict)
     for quoted in re.findall(r'"([^"]*\s[^"]*)"', cmd):
         if rem.target and rem.target in quoted and rem.target != quoted:
-            return replace(rem, action="manual_review", command=None, reversible=False, manual=True,
+            return replace(rem, action="manual_review", command=None, argv=None, reversible=False, manual=True,
                            description="Generated reversal withheld: the target name was truncated from a "
                                        "quoted multi-word argument and may hit the wrong target. Handle it manually.")
     if not _target_is_safe(rem):
-        return replace(rem, action="manual_review", command=None, reversible=False, manual=True,
+        return replace(rem, action="manual_review", command=None, argv=None, reversible=False, manual=True,
                        description="Generated reversal withheld: the target has unusual or unsafe "
                                    "characters. Inspect and handle this manually.")
     return rem
@@ -352,6 +366,11 @@ class UndoStep:
     description: str
     command: str | None
     manual: bool
+    argv: tuple | None = None
+
+    @property
+    def needs_shell(self) -> bool:
+        return self.argv is None and self.command is not None
 
 
 def _inverse(rem, os_name):
@@ -364,7 +383,8 @@ def _inverse(rem, os_name):
             mv = "move" if os_name == "windows" else "mv"
             return UndoStep("restore_quarantined_file",
                             f"Move the quarantined file back to {paths[0]}.",
-                            f'{mv} "{paths[1]}" "{paths[0]}"', manual=False)
+                            f'{mv} "{paths[1]}" "{paths[0]}"', False,
+                            argv=(mv, paths[1], paths[0]))
         return None
     if rem.action == "block_ip":
         cmd = rem.command or ""
@@ -372,15 +392,19 @@ def _inverse(rem, os_name):
             return UndoStep("unblock_ip",
                             f"Remove the firewall rule blocking {rem.target}.",
                             f'netsh advfirewall firewall delete rule name="Alibi block {rem.target}"',
-                            manual=False)
+                            False,
+                            argv=("netsh", "advfirewall", "firewall", "delete", "rule",
+                                  f"name=Alibi block {rem.target}"))
+        tool = "ip6tables" if "ip6tables" in cmd else "iptables"
         return UndoStep("unblock_ip",
                         f"Remove the firewall DROP rule for {rem.target}.",
-                        cmd.replace(" -A OUTPUT ", " -D OUTPUT ", 1), manual=False)
+                        cmd.replace(" -A OUTPUT ", " -D OUTPUT ", 1), False,
+                        argv=("sudo", tool, "-D", "OUTPUT", "-d", rem.target, "-j", "DROP"))
     if rem.action == "block_host":
         return UndoStep("unblock_host",
                         f"Remove the '0.0.0.0 {rem.target}' line from the hosts file by hand; "
                         "Alibi will not auto-edit the hosts file to undo a block.",
-                        None, manual=True)
+                        None, True)
     return None
 
 
