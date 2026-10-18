@@ -185,3 +185,15 @@ def test_block_host_withheld_for_unsafe_host():
     rems = plan_remediations([v], target_os="posix")
     assert all(r.action != "block_host" for r in rems)
     assert not any(r.automatic and r.command and "$(" in r.command for r in rems)
+
+
+def test_scheduled_task_withheld_when_quoted_name_is_truncated():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command='schtasks /create /tn "Nightly Backup" /tr x')
+    r = plan_remediations([v])[0]
+    assert r.action == "manual_review" and r.command is None
+
+
+def test_single_word_quoted_task_still_reverses():
+    v = _verdict(VerdictKind.HIJACKED, "scheduled task", command='schtasks /create /tn "WinHealthCheck" /tr x')
+    r = plan_remediations([v])[0]
+    assert r.action == "delete_scheduled_task" and "WinHealthCheck" in r.command

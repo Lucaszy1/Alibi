@@ -189,16 +189,24 @@ def _target_is_safe(rem) -> bool:
 
 
 def _harden(rem):
-    """Fail safe: never auto-run a reversal whose target carries shell-unsafe characters.
+    """Fail safe: never auto-run a reversal Alibi cannot vouch for.
 
     An attacker controls file paths, hosts, service units and task names inside the session, so an
-    interpolated command could otherwise be a code-execution path under --apply. An unsafe target
-    is downgraded to a manual review with no command, so Alibi runs nothing it cannot vouch for."""
-    if rem.automatic and not _target_is_safe(rem):
-        return replace(rem, action="manual_review", command=None,
+    interpolated command could be a code-execution path under --apply (unsafe characters), and a
+    name extracted from a quoted multi-word argument may be truncated to the wrong target. Either
+    case is downgraded to a manual review with no command."""
+    if not rem.automatic:
+        return rem
+    cmd = _command(rem.verdict)
+    for quoted in re.findall(r'"([^"]*\s[^"]*)"', cmd):
+        if rem.target and rem.target in quoted and rem.target != quoted:
+            return replace(rem, action="manual_review", command=None, reversible=False, manual=True,
+                           description="Generated reversal withheld: the target name was truncated from a "
+                                       "quoted multi-word argument and may hit the wrong target. Handle it manually.")
+    if not _target_is_safe(rem):
+        return replace(rem, action="manual_review", command=None, reversible=False, manual=True,
                        description="Generated reversal withheld: the target has unusual or unsafe "
-                                   "characters. Inspect and handle this manually.",
-                       reversible=False, manual=True)
+                                   "characters. Inspect and handle this manually.")
     return rem
 
 
