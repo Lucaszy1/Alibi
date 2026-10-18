@@ -7,12 +7,13 @@ from __future__ import annotations
 from alibi.incidents import correlate
 from alibi.remediate import plan_remediations
 from alibi.verdict import EvidenceSource
+from alibi.redact import redact
 
 _FENCE = chr(96) * 3
 
 
 def _san(text, n=60):
-    t = " ".join((text or "").split()).replace('"', "'")
+    t = " ".join(redact(text or "").split()).replace('"', "'")
     return (t[: n - 1] + "\u2026") if len(t) > n else t
 
 
@@ -38,7 +39,7 @@ def build_report(verdicts, window_seconds: float = 120.0) -> str:
     for n, inc in enumerate(incs, 1):
         out.append(f"## Incident {n} - {inc.computer}")
         out.append("")
-        out.append(f"- {inc.summary}")
+        out.append(f"- {redact(inc.summary)}")
         out.append(f"- Window: {inc.start:%Y-%m-%d %H:%M:%SZ} to {inc.end:%H:%M:%SZ}")
         out.append("")
         out.append("### Timeline")

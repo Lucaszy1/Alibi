@@ -38,8 +38,12 @@ Model, confidence, performance
   be slow. Fix path: a precomputed per-session taint index.
 
 Privacy
-- Evidence excerpts can include secret-like text; Alibi does not redact secrets in its output.
-  Matters once reports exist. Fix path: redaction in the reporting layer (M12).
+- Secret redaction in shared reports: DONE. redact.py masks credential values (keyed secrets, URL
+  credentials, Authorization/Bearer headers, AWS/GitHub/Slack tokens, PEM private-key blocks) and
+  report.py applies it through the _san sanitizer before truncation, so a secret can't be half-shown;
+  attack indicators (hosts, URLs, commands) are preserved by design. Scope decision: redaction covers
+  the report artifact (the output meant to be shared); scan/adjudicate stdout and --json are the
+  operator's own local view of their own machine and are intentionally left unredacted.
 
 ## B. Deferred milestones (on the roadmap, not built)
 
@@ -52,7 +56,8 @@ Privacy
   per-format adapters that normalize into the neutral shape, added when a real feed needs one.
 - M11 allowlists (false-positive controls).
 - M-An unexplained-action anomaly tier (attack-agnostic catch for no-source novel attacks).
-- M12 explainability (incident report artifact, provenance graph, secret redaction).
+- M12 explainability: DONE (incident report artifact, Mermaid provenance graph, and secret
+  redaction in reports are all shipped and tested).
 - M13 remediation depth (rollback bundle, undo, containment, IP / registry / WMI reversals).
 - M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
   tested; the MCP server is not yet built).
