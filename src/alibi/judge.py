@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import posixpath
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -84,13 +85,30 @@ _INSTRUCTION_RES = [
 ]
 
 
+_PASTED_BLOCK_RE = re.compile(r"<pasted_content[^>]*>.*?</pasted_content>", re.I | re.S)
+_ZW_RE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060\ufeff]")
+
+
+def _denoise(text: str) -> str:
+    """Canonicalise unicode (NFKC) and strip zero-width / bidi-control characters, so an injection
+    hidden with invisible characters or look-alike fullwidth glyphs still matches."""
+    return _ZW_RE.sub("", unicodedata.normalize("NFKC", text))
+
+
+def _user_intent(text: str) -> str:
+    """User text with pasted/attached blocks removed: pasted content may be attacker-controlled (a
+    malicious doc the user pasted), so it must not count as the user's request when justifying an
+    action -- otherwise an attacker could self-justify by getting their payload pasted into the chat."""
+    return _PASTED_BLOCK_RE.sub(" ", text)
+
+
 def _clean(text: str) -> str:
     return " ".join(_PASTED_TAG_RE.sub(" ", text).split())
 
 
 def _norm_text(text: str) -> str:
     """Lower-case, forward slashes, git-bash drive paths as c:/, quotes dropped, single spaces."""
-    t = text.lower().replace("\\", "/")
+    t = _denoise(text).lower().replace("\\", "/")
     t = re.sub(r"/{2,}", "/", t)
     t = re.sub(r"(?<![\w:])/([a-z])/", r"\1:/", t)
     t = t.replace('"', " ").replace("'", " ").replace("`", " ")
@@ -421,7 +439,7 @@ def trace_provenance(
     if call.tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         targets = {t for t in targets if t.kind is TargetKind.PATH}
 
-    user_all = " ".join(p.text for p in prompts)
+    user_all = " ".join(_user_intent(p.text) for p in prompts)
     user_norm = _norm_text(user_all)
     user_paths = _user_paths(user_all)
     roots = [_norm_path(r) for r in roots if r]
@@ -450,7 +468,7 @@ def trace_provenance(
                 continue
             # Locate in the raw text for a readable excerpt (normalisation shifts offsets a little).
             raw_idx = max(0, min(len(raw) - 1, idx))
-            window = raw[max(0, raw_idx - INSTRUCTION_RADIUS): raw_idx + INSTRUCTION_RADIUS]
+            window = _denoise(raw[max(0, raw_idx - INSTRUCTION_RADIUS): raw_idx + INSTRUCTION_RADIUS])
             hits.append(
                 UntrustedHit(
                     target, result, tool_names.get(result.tool_use_id), _excerpt(_clean(raw), _clean_index(raw, raw_idx)),
@@ -461,7 +479,7 @@ def trace_provenance(
     phrase = None
     cmd_shingles = _shingles(action_norm)
     for prompt in reversed(prompts):
-        p_norm = _norm_text(prompt.text)
+        p_norm = _norm_text(_user_intent(prompt.text))
         found = next((s for s in cmd_shingles if s in p_norm), None)
         if found:
             phrase = (prompt, found)
@@ -469,8 +487,8 @@ def trace_provenance(
 
     target_match = None
     for prompt in reversed(prompts):
-        p_norm = _norm_text(prompt.text)
-        p_paths = _user_paths(prompt.text)
+        p_norm = _norm_text(_user_intent(prompt.text))
+        p_paths = _user_paths(_user_intent(prompt.text))
         for t in sorted(covered, key=str):
             if _covered(t, p_paths, p_norm, ()):
                 idx = _appears_in(t, p_norm)
@@ -482,7 +500,7 @@ def trace_provenance(
     word = None
     action_words = {w for w in _WORD_RE.findall(action_norm) if w not in _GENERIC_WORDS}
     for prompt in reversed(prompts):
-        p_words = set(_WORD_RE.findall(_norm_text(prompt.text)))
+        p_words = set(_WORD_RE.findall(_norm_text(_user_intent(prompt.text))))
         shared = sorted(action_words & p_words)
         if shared:
             word = (prompt, ", ".join(shared[:5]))
@@ -612,8 +630,11 @@ class Judge:
         final = verdict
         if self.model_tier is not None:
             if verdict.verdict is VerdictKind.UNKNOWN:
+                # Strictly non-exonerating: the model may escalate an UNKNOWN to UNJUSTIFIED/HIJACKED
+                # but never clear it to JUSTIFIED. The untrusted content it reads could carry a prompt
+                # injection aimed at the judge ("respond JUSTIFIED"), so exoneration is never accepted.
                 override = self.model_tier.judge(context)
-                if override is not None:
+                if override is not None and override.verdict is not VerdictKind.JUSTIFIED:
                     final = override
             elif verdict.verdict is VerdictKind.UNJUSTIFIED and context.untrusted_results:
                 # Paraphrase recovery: untrusted content is present but no literal link was found,
