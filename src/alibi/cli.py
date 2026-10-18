@@ -215,6 +215,8 @@ def _add_common_args(sp) -> None:
                     help="Ollama host for the model tier (default http://127.0.0.1:11434)")
     sp.add_argument("--max-model-calls", type=int, default=50, metavar="N",
                     help="cap model adjudications (default 50)")
+    sp.add_argument("--state", type=Path, default=None, metavar="FILE",
+                    help="append a JSON record of this run to FILE (durable history across runs)")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -262,6 +264,10 @@ def _build_parser() -> argparse.ArgumentParser:
     undo = sub.add_parser("undo", help="apply a saved rollback bundle to revert Alibi's own reversals")
     undo.add_argument("bundle", type=Path, help="undo bundle JSON written by `remediate --apply`")
     undo.add_argument("--apply", action="store_true", help="run each undo step, asking y/N (default: dry run)")
+
+    hist = sub.add_parser("history", help="print the recorded run history from a --state file")
+    hist.add_argument("state", type=Path, help="state file written by --state")
+    hist.add_argument("--json", action="store_true", help="emit each run record as JSON Lines")
 
     rep = sub.add_parser("report", help="Markdown incident report with provenance and proposed reversals")
     _add_common_args(rep)
@@ -447,6 +453,25 @@ def _remediate(verdicts, args, out, err) -> int:
     return 1
 
 
+def _history(args, out, err) -> int:
+    """Print the recorded run history so results persist and can be reviewed across runs."""
+    from alibi.state import load_runs
+    runs = load_runs(args.state)
+    if not runs:
+        print(f"alibi: no runs recorded in {args.state}", file=err)
+        return 0
+    if args.json:
+        for r in runs:
+            out.write(json.dumps(r) + "\n")
+        return 0
+    for r in runs:
+        counts = "  ".join(f"{k}={n}" for k, n in sorted(r.get("counts", {}).items()))
+        out.write(f"{r.get('run_at', '?')}  total={r.get('total', 0)}  {counts}\n")
+        for fl in r.get("flagged", []):
+            out.write(f"    {fl.get('label', '?'):<11} {fl.get('confidence')}  {fl.get('reason', '')}\n")
+    return 0
+
+
 def _undo(args, out, err) -> int:
     """Apply a saved rollback bundle to revert Alibi's own reversals, under the same y/N gate."""
     from alibi.remediate import apply_undo, undo_from_json
@@ -522,6 +547,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         return _bench(args, out, err)
     if args.command == "undo":
         return _undo(args, out, err)
+    if args.command == "history":
+        return _history(args, out, err)
 
     if not args.results.is_file():
         print(f"alibi: results file not found: {args.results}", file=err)
@@ -558,6 +585,9 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
         from alibi.allowlist import load_allowlist
         judge.allowlist = load_allowlist(args.allow)
     verdicts = judge.judge_all(alerts)
+    if getattr(args, "state", None):
+        from alibi.state import record_run
+        record_run(args.state, verdicts, source=str(transcript))
     if args.command == "remediate":
         return _remediate(verdicts, args, out, err)
     if args.command == "incidents":

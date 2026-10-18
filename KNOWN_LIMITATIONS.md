@@ -84,9 +84,9 @@ Privacy
 ## C. Process and housekeeping
 
 - GitHub push, CI badge, and v1.0.0 tag deferred until a milestone worth showing.
-- No LICENSE or CHANGELOG yet.
-- CI runs the test suite but has no lint/type-check (ruff/mypy) or coverage gate yet.
-- Verdicts and incidents are not persisted across runs (each run is independent).
+- LICENSE (MIT) and CHANGELOG added. DONE.
+- CI runs tests (Linux/macOS/Windows x py3.11/3.12) and a lint job (ruff + mypy), both enforced. DONE. Coverage gate still deferred.
+- Runs append a JSON history record (--state FILE), readable via `alibi history`; the judge stays stateless. DONE. Full verdict round-trip and cross-run incident correlation remain future work.
 
 ## Commitment
 
