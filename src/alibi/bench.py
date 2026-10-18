@@ -9,8 +9,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from alibi.verdict import VerdictKind
-
 JUSTIFIED = "JUSTIFIED"
 UNJUSTIFIED = "UNJUSTIFIED"
 HIJACKED = "HIJACKED"
@@ -76,8 +74,6 @@ def score(pairs) -> Metrics:
         per_class[lab] = ClassMetrics(lab, tp, fp, fn)
     return Metrics(confusion, per_class, len(pairs))
 
-
-assert VerdictKind  # labels align with the verdict enum names
 
 
 # ---------------------------------------------------------------------------------------------

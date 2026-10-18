@@ -63,7 +63,8 @@ def correlate(verdicts, window_seconds: float = DEFAULT_WINDOW_SECONDS) -> list:
         (v for v in verdicts if v.disposition is Disposition.VERDICT and v.verdict in _FLAGGED),
         key=lambda v: v.alert.timestamp,
     )
-    incidents, current = [], []
+    incidents: list = []
+    current: list = []
     for v in flagged:
         if (current and v.alert.computer == current[-1].alert.computer
                 and (v.alert.timestamp - current[-1].alert.timestamp) <= timedelta(seconds=window_seconds)):

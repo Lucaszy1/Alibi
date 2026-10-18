@@ -75,7 +75,7 @@ class Verdict:
     @property
     def label(self) -> str:
         if self.disposition is Disposition.VERDICT:
-            return self.verdict.value
+            return self.verdict.value  # type: ignore[union-attr]
         if self.disposition is Disposition.HARNESS:
-            return f"HARNESS/{self.concern.value}"
+            return f"HARNESS/{self.concern.value}"  # type: ignore[union-attr]
         return "STAND_ASIDE"

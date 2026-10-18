@@ -139,7 +139,7 @@ def parse_decision(raw: str, min_confidence: float = MIN_CONFIDENCE):
     if kind not in _ALLOWED:
         return None
     try:
-        conf = float(data.get("confidence"))
+        conf = float(data.get("confidence"))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
     if not 0.0 <= conf <= 1.0 or conf < min_confidence:

@@ -68,7 +68,7 @@ def reveal(text: str) -> str:
             raw = base64.b64decode(tok + "=" * (-len(tok) % 4))
         except (binascii.Error, ValueError):
             continue
-        s = _printable(raw)
+        s = _printable(raw)  # type: ignore[assignment]
         if s and s.strip():
             found.append(s)
 
@@ -77,7 +77,7 @@ def reveal(text: str) -> str:
             raw = bytes(int(h, 16) for h in re.findall(r"\\x([0-9a-fA-F]{2})", m.group(0)))
         except ValueError:
             continue
-        s = _printable(raw)
+        s = _printable(raw)  # type: ignore[assignment]
         if s:
             found.append(s)
 
@@ -86,7 +86,7 @@ def reveal(text: str) -> str:
             raw = binascii.unhexlify(m.group(1))
         except (binascii.Error, ValueError):
             continue
-        s = _printable(raw)
+        s = _printable(raw)  # type: ignore[assignment]
         if s and s.strip():
             found.append(s)
 

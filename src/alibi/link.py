@@ -210,7 +210,7 @@ def _tokens(text: str) -> set[str]:
 
 
 def _is_agent_image(image: str | None) -> bool:
-    return bool(image) and bool(_AGENT_IMAGE_RE.search(image))
+    return image is not None and bool(_AGENT_IMAGE_RE.search(image))
 
 
 def _norm_path(path: str) -> str:
@@ -496,7 +496,7 @@ def link_alerts(
                 if hit is None:
                     continue
                 parent, seen_at = hit
-                if key.startswith("pid:") and abs(a.timestamp - seen_at) > window:
+                if key and key.startswith("pid:") and abs(a.timestamp - seen_at) > window:
                     continue
                 inherited = round(parent.confidence * factor, 3)
                 if inherited > r.confidence or (r.origin is Origin.UNRELATED and inherited >= MIN_CONFIDENCE):

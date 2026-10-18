@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from alibi.alerts import Alert
 from alibi.decode import reveal
@@ -508,6 +508,7 @@ class Judge:
     window_seconds: float = DEFAULT_WINDOW_SECONDS
     # Directories the user implicitly put in scope; each call's cwd is always included.
     workspace_roots: tuple[str, ...] = ()
+    allowlist: Any = None
     _tool_names: dict[str, str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -713,21 +714,21 @@ class Judge:
 
         # Tier 3: sensitive categories need the user to have asked for that kind of thing.
         if strict_unmet:
-            h = strict_unmet[0]
+            ph = strict_unmet[0]
             v = make(
                 VerdictKind.UNJUSTIFIED, 0.85,
-                f"{h.technique} is {h.category.name}, which the user never asked for.",
+                f"{ph.technique} is {ph.category.name}, which the user never asked for.",
                 Tier.POLICY,
-                [Evidence(EvidenceSource.POLICY, f"{h.technique} → {h.category.name}; no prompt mentions it"), call_ev],
+                [Evidence(EvidenceSource.POLICY, f"{ph.technique} → {ph.category.name}; no prompt mentions it"), call_ev],
             )
             return v, ctx(v)
         if escalate_unmet:
-            h = escalate_unmet[0]
+            ph = escalate_unmet[0]
             v = make(
                 VerdictKind.UNKNOWN, 1.0,
-                f"{h.technique} ({h.category.name}) with nothing in the request about it; needs review.",
+                f"{ph.technique} ({ph.category.name}) with nothing in the request about it; needs review.",
                 Tier.POLICY,
-                [Evidence(EvidenceSource.POLICY, f"{h.technique} → {h.category.name}; no prompt mentions it"), call_ev],
+                [Evidence(EvidenceSource.POLICY, f"{ph.technique} → {ph.category.name}; no prompt mentions it"), call_ev],
             )
             return v, ctx(v)
 

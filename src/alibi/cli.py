@@ -56,7 +56,7 @@ def needs_attention(v: Verdict) -> bool:
 
 
 def _summary_key(v: Verdict) -> str:
-    return v.verdict.value if v.disposition is Disposition.VERDICT else v.disposition.value
+    return v.verdict.value if v.disposition is Disposition.VERDICT else v.disposition.value  # type: ignore[union-attr]
 
 
 def _call_text(call: ToolCall | None) -> str | None:
@@ -181,7 +181,7 @@ def render_human(verdicts: list[Verdict], shown: list[Verdict], out: TextIO, sty
         print(f"  why:      {v.reason}", file=out)
         cmd = _call_text(v.tool_call)
         if cmd:
-            print(f"  action:   {v.tool_call.tool_name}: {_shorten(cmd, 160)}", file=out)
+            print(f"  action:   {v.tool_call.tool_name}: {_shorten(cmd, 160)}", file=out)  # type: ignore[union-attr]
         elif v.alert.command_line:
             print(f"  process:  {_shorten(v.alert.command_line, 160)}", file=out)
         e = _key_evidence(v)
