@@ -7,6 +7,7 @@ are always side-effect free."""
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import sys
 from dataclasses import dataclass, replace
@@ -156,14 +157,48 @@ def _host(cmd, reason):
     return m.group(1).strip().strip(".,;") if m else None
 
 
+def _norm_target(raw):
+    raw = (raw or "").strip().strip(".,;")
+    if raw.startswith("["):
+        return raw[1:raw.index("]")] if "]" in raw else raw[1:]
+    if raw.count(":") == 1:
+        return raw.split(":", 1)[0]
+    return raw
+
+
+def _is_ip(host):
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_ipv6(host):
+    try:
+        return ipaddress.ip_address(host).version == 6
+    except ValueError:
+        return False
+
+
 def _extra(v, os_name):
     cmd = _command(v)
     reason = v.reason.lower()
     is_exfil = ("targets host" in reason or "exfiltrat" in reason
                 or (bool(_EXFIL_CMD_RE.search(cmd)) and ("http" in cmd.lower() or "--data" in cmd.lower())))
-    host = _host(cmd, reason) if is_exfil else None
-    if not host:
+    raw = _host(cmd, reason) if is_exfil else None
+    if not raw:
         return []
+    host = _norm_target(raw)
+    if _is_ip(host):
+        if os_name == "windows":
+            blk = f'netsh advfirewall firewall add rule name="Alibi block {host}" dir=out action=block remoteip={host}'
+        else:
+            tool = "ip6tables" if _is_ipv6(host) else "iptables"
+            blk = f"sudo {tool} -A OUTPUT -d {host} -j DROP"
+        return [Remediation(v, "block_ip",
+                            f"Block the exfiltration IP {host} outbound with a firewall rule.",
+                            command=blk, target=host, reversible=True, manual=False)]
     if os_name == "windows":
         blk = rf"echo 0.0.0.0 {host} >> %SystemRoot%\System32\drivers\etc\hosts"
     else:
@@ -185,6 +220,8 @@ def _target_is_safe(rem) -> bool:
         return bool(_SAFE_UNIT_RE.match(t))
     if rem.action == "block_host":
         return bool(_SAFE_HOST_RE.match(t))
+    if rem.action == "block_ip":
+        return _is_ip(t)
     return True
 
 
