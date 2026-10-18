@@ -262,6 +262,13 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="adjudicate UNKNOWNs inline before reporting")
     rep.add_argument("--incident-window", type=float, default=120.0, metavar="N",
                      help="max seconds between flagged actions on one host to chain them (default 120)")
+    bench = sub.add_parser("bench",
+                           help="run the labeled benchmark corpus through the judge, its ablations and baselines")
+    bench.add_argument("--corpus", type=Path, default=Path("benchmark/corpus"), metavar="DIR",
+                       help="corpus directory (default benchmark/corpus)")
+    bench.add_argument("--report", type=Path, default=None, metavar="FILE",
+                       help="also write a Markdown metrics report to FILE")
+    bench.add_argument("--json", action="store_true", help="emit per-system metrics as JSON Lines")
     return parser
 
 
@@ -426,6 +433,26 @@ def _remediate(verdicts, args, out, err) -> int:
     return 1
 
 
+def _bench(args, out, err) -> int:
+    """Run the benchmark corpus through the judge, its ablations and the baselines; print the
+    comparison table, optionally write a Markdown report, and with --json emit per-system rows."""
+    from alibi.bench import comparison_report, comparison_rows, load_corpus
+
+    if not (args.corpus / "cases.jsonl").is_file():
+        print(f"alibi: no corpus at {args.corpus} (expected cases.jsonl)", file=err)
+        return 2
+    corpus = load_corpus(args.corpus)
+    if args.json:
+        for row in comparison_rows(corpus):
+            out.write(json.dumps(row) + "\n")
+    else:
+        out.write(comparison_report(corpus))
+    if args.report:
+        args.report.write_text(comparison_report(corpus), encoding="utf-8")
+        print(f"alibi: wrote {args.report}", file=err)
+    return 0
+
+
 def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO | None = None) -> int:
     out = out or sys.stdout
     err = err or sys.stderr
@@ -437,6 +464,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
 
     if args.command == "hook":
         return _hook(args, sys.stdin, out)
+    if args.command == "bench":
+        return _bench(args, out, err)
 
     if not args.results.is_file():
         print(f"alibi: results file not found: {args.results}", file=err)

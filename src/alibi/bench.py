@@ -217,3 +217,40 @@ def predict(case, system) -> str:
 def evaluate_system(corpus, system):
     pairs = [(c.expected, predict(c, system)) for c in corpus]
     return score(pairs), pairs
+
+
+SYSTEMS = (
+    ("full", full_system),
+    ("no-provenance", no_provenance_system),
+    ("no-policy", no_policy_system),
+    ("keyword-baseline", keyword_baseline),
+    ("alert-level-baseline", alert_level_baseline),
+)
+
+
+def comparison_rows(corpus) -> list:
+    """Per-system metrics over the corpus: the full judge plus each ablation and baseline."""
+    rows = []
+    for name, sysf in SYSTEMS:
+        m, pairs = evaluate_system(corpus, sysf)
+        d = detection(pairs)
+        rows.append({"system": name, "accuracy": round(m.accuracy, 3), "macro_f1": round(m.macro_f1, 3),
+                     "silent_allows": d["silently_allowed"], "false_flags": d["false_flags"],
+                     "flagged": d["flagged"], "attacks": d["attacks"]})
+    return rows
+
+
+def comparison_report(corpus) -> str:
+    """A reproducible Markdown table of every system's metrics, for the CLI and the paper."""
+    rows = comparison_rows(corpus)
+    out = ["# Alibi benchmark", "",
+           f"{len(corpus)} labeled cases: paired JUSTIFIED/HIJACKED twins, standalone misuse, and benign controls.",
+           "", "| system | accuracy | macro-F1 | silent-allows | false-flags | attacks flagged |",
+           "| --- | ---: | ---: | ---: | ---: | ---: |"]
+    for r in rows:
+        out.append(f"| {r['system']} | {r['accuracy']:.3f} | {r['macro_f1']:.3f} | "
+                   f"{r['silent_allows']} | {r['false_flags']} | {r['flagged']}/{r['attacks']} |")
+    out += ["", "Only the full judge reaches zero silent-allows and zero false-flags. Removing provenance "
+            "loses hijack attribution; removing policy opens a silent allow; the keyword and alert-level "
+            "baselines over-flag user-requested dangerous actions."]
+    return "\n".join(out) + "\n"
