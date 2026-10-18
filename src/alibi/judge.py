@@ -23,7 +23,7 @@ from typing import Any, Protocol
 from alibi.alerts import Alert
 from alibi.decode import reveal
 from alibi.link import DEFAULT_WINDOW_SECONDS, LinkResult, Origin, link_alert, link_alerts
-from alibi.taint import trace_taint
+from alibi.taint import TaintIndex
 from alibi.transcript import Event, SourceKind, ToolCall, ToolResult, UserPrompt
 from alibi.verdict import (
     Concern,
@@ -748,9 +748,13 @@ class Judge:
         # untrusted input and then ran. Flag such a flow when the action is consequential (a strict
         # sensitive category, or it executed a dropped file); plain benign base64 does not qualify.
         if not prov.untrusted_hits:
+            idx = self.__dict__.get("_taint_index")
+            if idx is None:
+                idx = TaintIndex(self.events)
+                self.__dict__["_taint_index"] = idx
             cache = self.__dict__.setdefault("_taint_cache", {})
             if id(call) not in cache:
-                cache[id(call)] = trace_taint(self.events, call)
+                cache[id(call)] = idx.trace(call)
             taint = cache[id(call)]
             if taint.tainted and (strict_unmet or taint.via_file):
                 ev = [call_ev]
