@@ -87,6 +87,49 @@ def _schtask_name(cmd: str):
     return m.group(1).strip() if m else None
 
 
+_REG_RUN_RE = re.compile(r"reg(?:\.exe)?\s+add\s+\"?(HK[^\"\s]+)\"?.*?/v\s+\"?([^\"/]+?)\"?(?:\s+/|\s*$)", re.I | re.S)
+_SC_CREATE_RE = re.compile(r"\bsc(?:\.exe)?\s+create\s+\"?([^\"\s]+)\"?", re.I)
+_NEWSVC_RE = re.compile(r"New-Service\b.*?-Name\s+\"?([^\"\s]+)\"?", re.I | re.S)
+_STARTUP_RE = re.compile(r"([A-Za-z]:\\[^\"\r\n|&]*?\\Startup\\[^\"\r\n|&]+)", re.I)
+_WMI_RE = re.compile(r"(CommandLineEventConsumer|ActiveScriptEventConsumer|__EventFilter|__FilterToConsumerBinding|Register-WmiEvent|Set-WmiInstance)", re.I)
+_SAFE_KEY_RE = re.compile(r"^HK[A-Za-z0-9_\\]+$", re.I)
+
+
+def _win_persistence(v, cmd):
+    low = cmd.lower()
+    m = _REG_RUN_RE.search(cmd)
+    if m and "\\run" in m.group(1).lower():
+        key, name = m.group(1), m.group(2).strip()
+        if _SAFE_KEY_RE.match(key):
+            return Remediation(v, "delete_run_key",
+                               f"Delete the Run-key autostart entry '{name}' the agent added under {key}.",
+                               command=f'reg delete "{key}" /v "{name}" /f', target=name, manual=False)
+        return Remediation(v, "manual_review",
+                           "Run-key persistence detected but the registry path looks unsafe to auto-edit; remove it manually.",
+                           manual=True)
+    m = _SC_CREATE_RE.search(cmd) or _NEWSVC_RE.search(cmd)
+    if m and ("sc create" in low or "sc.exe create" in low or "new-service" in low):
+        name = m.group(1).strip()
+        return Remediation(v, "delete_service",
+                           f"Stop and delete the Windows service '{name}' the agent created.",
+                           command=f"sc stop {name} & sc delete {name}", target=name, manual=False)
+    m = _STARTUP_RE.search(cmd)
+    if m:
+        path = m.group(1).strip().strip('"')
+        stamp = v.alert.timestamp.strftime("%Y%m%d%H%M%S")
+        return Remediation(v, "quarantine_file",
+                           f"Quarantine the autostart file dropped in the Startup folder ({path}).",
+                           command=f'move "{path}" "{path}.{stamp}.alibi-quarantine"', target=path,
+                           reversible=True, manual=False)
+    if _WMI_RE.search(cmd):
+        return Remediation(v, "review_wmi",
+                           "WMI event-subscription persistence detected. Removing it safely means deleting the "
+                           "__EventFilter, the consumer, and their binding; Alibi will not auto-edit WMI. "
+                           "Inspect 'Get-WmiObject -Namespace root/subscription' and remove them manually.",
+                           manual=True)
+    return None
+
+
 def _propose(v: Verdict, os_name: str) -> Remediation:
     cmd = _command(v)
     reason = v.reason.lower()
@@ -98,6 +141,10 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
             return Remediation(v, "delete_scheduled_task",
                                f"Delete the scheduled task '{name}' the agent created.",
                                command=f'schtasks /delete /tn "{name}" /f', target=name, manual=False)
+
+    win = _win_persistence(v, cmd)
+    if win is not None:
+        return win
 
     low = cmd.lower()
     plist = _plist_path(cmd)
@@ -144,6 +191,8 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
 
 _SAFE_PATH_RE = re.compile(r"^[A-Za-z0-9 _.\-:()\\/~]+$")
 _SAFE_HOST_RE = re.compile(r"^[A-Za-z0-9.\-]+$")
+_SAFE_SVC_RE = re.compile(r"^[A-Za-z0-9_.\-]+$")
+_SAFE_RUNVAL_RE = re.compile(r"^[A-Za-z0-9 _.\-]+$")
 _SAFE_UNIT_RE = re.compile(r"^[A-Za-z0-9@._\-]+$")
 _SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9 _.\-\\/]+$")
 
@@ -222,6 +271,10 @@ def _target_is_safe(rem) -> bool:
         return bool(_SAFE_HOST_RE.match(t))
     if rem.action == "block_ip":
         return _is_ip(t)
+    if rem.action == "delete_service":
+        return bool(_SAFE_SVC_RE.match(t))
+    if rem.action == "delete_run_key":
+        return bool(_SAFE_RUNVAL_RE.match(t))
     return True
 
 
