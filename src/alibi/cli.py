@@ -241,6 +241,13 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="run each proposed reversal, asking y/N before every one (default: dry run, propose only)")
     rem.add_argument("--os", choices=("windows", "posix"), default=None,
                      help="target OS for generated reversal commands (default: the machine running alibi)")
+
+    inc = sub.add_parser("incidents", help="group flagged verdicts from one intrusion into correlated incidents")
+    _add_common_args(inc)
+    inc.add_argument("--model", nargs="?", const="llama3.1:8b", default=None, metavar="NAME",
+                     help="adjudicate UNKNOWNs inline before correlating")
+    inc.add_argument("--incident-window", type=float, default=120.0, metavar="N",
+                     help="max seconds between flagged actions on one host to chain them (default 120)")
     return parser
 
 
@@ -260,6 +267,37 @@ def _remediation_to_json(r, status=None):
     if status is not None:
         d["status"] = status
     return d
+
+
+def _incidents(verdicts, args, out, err) -> int:
+    """Correlate flagged verdicts into same-host attack chains and report them."""
+    from alibi.incidents import correlate
+
+    incs = correlate(verdicts, window_seconds=getattr(args, "incident_window", 120.0))
+    if not incs:
+        if not args.json:
+            print("alibi: no incidents (nothing flagged).", file=err)
+        return 0
+    if args.json:
+        for i in incs:
+            out.write(json.dumps({
+                "computer": i.computer,
+                "start": i.start.isoformat(),
+                "end": i.end.isoformat(),
+                "span_seconds": round(i.span_seconds, 3),
+                "hijacked": i.hijacked,
+                "techniques": list(i.techniques),
+                "steps": [{"verdict": v.label, "confidence": v.confidence, "reason": v.reason,
+                           "timestamp": v.alert.timestamp.isoformat(), "rule": v.alert.rule_title}
+                          for v in i.verdicts],
+            }) + "\n")
+    else:
+        for n, i in enumerate(incs, 1):
+            out.write(f"Incident {n}: {i.summary}\n")
+            for v in i.verdicts:
+                out.write(f"    {v.alert.timestamp:%H:%M:%SZ}  {v.label:<11} {v.reason}\n")
+            out.write("\n")
+    return 1
 
 
 def _remediate(verdicts, args, out, err) -> int:
@@ -356,6 +394,8 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
     verdicts = Judge(events, model_tier=model_tier, window_seconds=args.window_seconds).judge_all(alerts)
     if args.command == "remediate":
         return _remediate(verdicts, args, out, err)
+    if args.command == "incidents":
+        return _incidents(verdicts, args, out, err)
     if args.command == "adjudicate":
         selected = [v for v in verdicts if v.tier is Tier.MODEL]
     else:
