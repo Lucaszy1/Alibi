@@ -2,9 +2,10 @@
 
 Alibi reads an AI coding agent's session transcript alongside the endpoint-security alerts it
 triggered and decides whether each flagged action was the user's intent or an injected attack. It
-follows untrusted data through the session, correlates the steps of one intrusion, and proposes a
-human-approved reversal. It is provenance-aware, not signature-based: it asks where an instruction
-came from, so a novel technique it has never seen is still caught when it traces to untrusted input.
+follows untrusted data through the session, correlates the steps of one intrusion, proposes a
+human-approved reversal, and can run inline as a hook that blocks a hijack before it happens. It is
+provenance-aware, not signature-based: it asks where an instruction came from, so a novel technique
+it has never seen is still caught when it traces to untrusted input.
 
 ## Verdicts
 
@@ -26,22 +27,25 @@ then judged in tiers, cheapest first:
 - Policy: does the action fall in a sensitive category (exfiltration, destruction, credential and
   collection, command-and-control, persistence, defense impairment) the user never licensed?
 - Bulk-rewrite: a burst of file rewrites the request never asked for (ransomware shaped).
+- Anomaly: a high-severity action with no external target and no tie to the request is surfaced for
+  review even when nothing else fires, the attack-agnostic catch for a genuinely novel technique.
 - Model (optional): a local Ollama model adjudicates the UNKNOWN pile and can recover a paraphrased
   hijack, but it can never clear a deterministic flag.
 
 A decoding pass runs before the tiers, so payloads hidden behind base64, PowerShell `-enc`, hex,
 percent-encoding, string concatenation, or shell variables are judged on their real content.
-Flagged actions on one host within a window are correlated into a single incident. Sessions from
-other agents can be ingested through a neutral role/kind JSONL format.
+Flagged actions on one host within a window are correlated into a single incident. A user-controlled
+allowlist can sanction known-good hosts, paths, or commands. Sessions from other agents can be
+ingested through a neutral role/kind JSONL format.
 
 ## Usage
 
 ### scan (fast, deterministic)
 ```
 alibi scan <hayabusa-results.csv> [transcript.jsonl]
-alibi scan results.csv --json
-alibi scan results.csv --all --min-confidence 0.7
-alibi scan results.csv --model          # also adjudicate UNKNOWNs inline (local Ollama)
+alibi scan results.csv --json --all --min-confidence 0.7
+alibi scan results.csv --model             # also adjudicate UNKNOWNs inline (local Ollama)
+alibi scan results.csv --allow allow.txt   # sanction known-good hosts/paths/commands
 ```
 
 ### adjudicate (background model pass)
@@ -52,14 +56,31 @@ alibi adjudicate results.csv transcript.jsonl --model qwen2.5:7b --json
 ### remediate (propose, then optionally act)
 ```
 alibi remediate results.csv transcript.jsonl   # list proposals, run nothing
-alibi remediate results.csv --json             # machine-readable proposals
 alibi remediate results.csv --apply            # act, asking y/N before every action
 ```
 
 ### incidents (correlate an intrusion's steps)
 ```
-alibi incidents results.csv transcript.jsonl              # grouped attack chains
-alibi incidents results.csv --json --incident-window 120
+alibi incidents results.csv transcript.jsonl --json --incident-window 120
+```
+
+### hook (real-time guardrail)
+Run Alibi as a Claude Code PreToolUse hook that judges each proposed tool call before it executes:
+a taint-derived call (a hijack in progress) is denied, an unrequested sensitive call is escalated to
+you, and everything else passes silently so the normal permission flow is untouched. It fails open,
+a hook error never blocks the agent.
+```
+alibi hook        # reads the hook JSON on stdin, prints a permission decision
+```
+Wire it in `.claude/settings.json`:
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "alibi hook" } ] }
+    ]
+  }
+}
 ```
 
 ## Exit codes
@@ -102,11 +123,13 @@ deterministic tiers.
 - `link.py`: link each alert to its tool call, the harness, or nothing.
 - `decode.py`: reveal payloads hidden behind encodings, concatenation, and shell variables.
 - `taint.py`: follow untrusted data into a later dangerous call, across dropped files.
-- `judge.py` / `verdict.py`: provenance, taint, policy, bulk-rewrite, and the optional model tier.
+- `judge.py` / `verdict.py`: provenance, taint, policy, bulk-rewrite, anomaly, and the model tier.
 - `model_tier.py`: local Ollama adjudication, fenced and guarded so it cannot be steered.
 - `incidents.py`: correlate flagged verdicts into same-host attack chains.
+- `allowlist.py`: user-sanctioned hosts, paths, and commands that downgrade a flag.
+- `inline.py`: real-time assessment of a proposed call (ALLOW / WARN / BLOCK).
 - `remediate.py`: propose reversals and run them only behind a per-action approval gate.
-- `cli.py`: the scan / adjudicate / remediate / incidents commands.
+- `cli.py`: the scan / adjudicate / remediate / incidents / hook commands.
 
 ## Known limitations
 

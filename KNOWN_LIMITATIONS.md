@@ -49,7 +49,8 @@ Privacy
 - M-An unexplained-action anomaly tier (attack-agnostic catch for no-source novel attacks).
 - M12 explainability (incident report artifact, provenance graph, secret redaction).
 - M13 remediation depth (rollback bundle, undo, containment, IP / registry / WMI reversals).
-- M14 real-time hook and MCP server (prevention, not just forensics).
+- M14 MCP server exposing assess to any agent (the Claude Code PreToolUse hook is shipped and
+  tested; the MCP server is not yet built).
 - M15 benchmark and evaluation (corpus, metrics, ablations, baselines, confidence calibration).
 - M16 paper. M17 vision (policy DSL, PyPI, docs site, public benchmark).
 
