@@ -2,16 +2,16 @@
 escapes, percent-encoding, gzip-in-base64, base32, and ROT13, so downstream tiers judge the real
 content, not the disguise.
 
-Pure and self-contained. reveal(text) returns the text with any decoded payloads appended. It only
-adds plausibly-decoded printable strings, and the noisier transforms (base32, ROT13) are gated to
-contribute only when they reveal a real indicator, so ordinary text passes through unchanged."""
+Pure, self-contained, and bounded so hostile input cannot make it slow: every scan is linear, the
+number and size of decoded tokens are capped, gunzip output is size-limited, and the whole-text
+ROT13 transform is skipped on large inputs. reveal(text) returns the text with any decoded payloads
+appended; the noisier transforms (base32, ROT13) are gated to contribute only on a real indicator."""
 
 from __future__ import annotations
 
 import base64
 import binascii
 import codecs
-import gzip
 import re
 import urllib.parse
 import zlib
@@ -22,12 +22,17 @@ _B32 = re.compile(r"\b[A-Z2-7]{16,}={0,6}")
 _XHEX = re.compile(r"(?:\\x[0-9a-fA-F]{2}){3,}")
 _HEX = re.compile(r"\b((?:[0-9a-fA-F]{2}){8,})\b")
 _PCT = re.compile(r"(?:%[0-9a-fA-F]{2}){4,}")
+# Deliberately linear: no nested quantifiers (those invite catastrophic backtracking / ReDoS).
 _INDICATORS = re.compile(
-    r"https?://|(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|ru|cn|xyz|top)\b|"
-    r"\b\d{1,3}(?:\.\d{1,3}){3}\b|invoke-webrequest|downloadstring|\biex\b|\bcurl\b|\bwget\b|"
-    r"powershell|cmd\.exe|-enc|certutil|bitsadmin",
+    r"https?://|\b\d{1,3}(?:\.\d{1,3}){3}\b|invoke-webrequest|downloadstring|\biex\b|"
+    r"\bcurl\b|\bwget\b|powershell|cmd\.exe|-enc|certutil|bitsadmin",
     re.I,
 )
+
+_MAX_TOKEN = 8192      # do not try to decode a single blob larger than this
+_MAX_MATCHES = 64      # cap how many blobs per scheme we decode
+_ROT13_LIMIT = 20000   # skip the whole-text ROT13 transform above this size
+_GUNZIP_LIMIT = 65536  # cap gunzip output so a compression bomb cannot blow memory
 
 
 def _printable(b: bytes) -> str | None:
@@ -49,6 +54,14 @@ def _meaningful(s: str) -> bool:
     return bool(_INDICATORS.search(s))
 
 
+def _gunzip(raw: bytes) -> bytes | None:
+    """Decompress a gzip blob, but never more than _GUNZIP_LIMIT bytes (bomb-safe)."""
+    try:
+        return zlib.decompressobj(16 + zlib.MAX_WBITS).decompress(raw, _GUNZIP_LIMIT)
+    except (zlib.error, OSError, EOFError):
+        return None
+
+
 def _from_bytes(raw: bytes) -> list[str]:
     """Decoded forms of a decoded blob: its printable text and, when it is gzip, the inner payload."""
     out: list[str] = []
@@ -56,12 +69,10 @@ def _from_bytes(raw: bytes) -> list[str]:
     if s and s.strip():
         out.append(s)
     if raw[:2] == b"\x1f\x8b":
-        try:
-            g = _printable(gzip.decompress(raw))
-        except (OSError, EOFError, zlib.error):
-            g = None
-        if g and g.strip():
-            out.append(g)
+        g = _gunzip(raw)
+        gs = _printable(g) if g else None
+        if gs and gs.strip():
+            out.append(gs)
     return out
 
 
@@ -83,8 +94,10 @@ def _resolve_inline(text: str) -> str:
 def reveal(text: str) -> str:
     found: list[str] = []
 
-    for m in _ENC_FLAG.finditer(text):
+    for m in list(_ENC_FLAG.finditer(text))[:_MAX_MATCHES]:
         tok = m.group(1)
+        if len(tok) > _MAX_TOKEN:
+            continue
         try:
             raw = base64.b64decode(tok + "=" * (-len(tok) % 4))
         except (binascii.Error, ValueError):
@@ -93,16 +106,14 @@ def reveal(text: str) -> str:
         if s:
             found.append(s)
         if raw[:2] == b"\x1f\x8b":
-            try:
-                g = _printable(gzip.decompress(raw))
-            except (OSError, EOFError, zlib.error):
-                g = None
-            if g and g.strip():
-                found.append(g)
+            g = _gunzip(raw)
+            gs = _printable(g) if g else None
+            if gs and gs.strip():
+                found.append(gs)
 
-    for m in _B64.finditer(text):
+    for m in list(_B64.finditer(text))[:_MAX_MATCHES]:
         tok = m.group(0)
-        if len(set(tok)) < 6:
+        if len(tok) > _MAX_TOKEN or len(set(tok)) < 6:
             continue
         try:
             raw = base64.b64decode(tok + "=" * (-len(tok) % 4))
@@ -110,8 +121,11 @@ def reveal(text: str) -> str:
             continue
         found.extend(_from_bytes(raw))
 
-    for m in _B32.finditer(text):
-        t = m.group(0).rstrip("=")
+    for m in list(_B32.finditer(text))[:_MAX_MATCHES]:
+        tok = m.group(0)
+        if len(tok) > _MAX_TOKEN:
+            continue
+        t = tok.rstrip("=")
         try:
             raw = base64.b32decode(t + "=" * (-len(t) % 8))
         except (binascii.Error, ValueError):
@@ -120,14 +134,18 @@ def reveal(text: str) -> str:
         if cand and cand.strip() and _meaningful(cand):
             found.append(cand)
 
-    for m in _XHEX.finditer(text):
+    for m in list(_XHEX.finditer(text))[:_MAX_MATCHES]:
+        if len(m.group(0)) > _MAX_TOKEN:
+            continue
         try:
             raw = bytes(int(h, 16) for h in re.findall(r"\\x([0-9a-fA-F]{2})", m.group(0)))
         except ValueError:
             continue
         found.extend(_from_bytes(raw))
 
-    for m in _HEX.finditer(text):
+    for m in list(_HEX.finditer(text))[:_MAX_MATCHES]:
+        if len(m.group(1)) > _MAX_TOKEN:
+            continue
         try:
             raw = binascii.unhexlify(m.group(1))
         except (binascii.Error, ValueError):
@@ -139,9 +157,10 @@ def reveal(text: str) -> str:
         if dec != text:
             found.append(dec)
 
-    rot = codecs.encode(text, "rot_13")
-    if rot != text and _meaningful(rot):
-        found.append(rot)
+    if len(text) <= _ROT13_LIMIT:
+        rot = codecs.encode(text, "rot_13")
+        if rot != text and _meaningful(rot):
+            found.append(rot)
 
     resolved = _resolve_inline(text)
     if resolved != text:
