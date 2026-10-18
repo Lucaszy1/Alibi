@@ -659,7 +659,8 @@ class Judge:
                     ev.insert(0, Evidence(EvidenceSource.UNTRUSTED_RESULT, snip, taint.source.timestamp, taint.source.tool_use_id))
                 why = ("a file the agent wrote from untrusted content" if taint.via_file
                        else f"untrusted content ({taint.token})")
-                v = make(VerdictKind.HIJACKED, 0.85 if taint.via_file else 0.8,
+                conf = min(0.95, round(0.7 + 0.2 * taint.strength + (0.05 if taint.via_file else 0.0), 2))
+                v = make(VerdictKind.HIJACKED, conf,
                          f"The action is derived from {why}, which the user never introduced.",
                          Tier.PROVENANCE, ev)
                 return v, ctx(v)

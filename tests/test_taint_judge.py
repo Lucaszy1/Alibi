@@ -27,6 +27,7 @@ def test_judge_flags_execution_of_a_dropped_file_as_hijack():
     v = Judge(events).judge_all([_alert(T + timedelta(seconds=3), r"bash C:\victim-repo\stage.sh")])[0]
     assert v.verdict is VerdictKind.HIJACKED and v.tier is Tier.PROVENANCE
     assert "wrote" in v.reason
+    assert v.confidence > 0.5  # a dropped-file exec is a confident flag
 
 
 def test_judge_does_not_taint_flag_benign_local_work():
