@@ -75,9 +75,9 @@ def reveal(text: str) -> str:
         if s and s.strip():
             found.append(s)
 
-    for m in _PCT.finditer(text):
-        s = urllib.parse.unquote(m.group(0))
-        if s and s != m.group(0):
-            found.append(s)
+    if _PCT.search(text):
+        dec = urllib.parse.unquote(text)
+        if dec != text:
+            found.append(dec)
 
     return text + " " + " ".join(found) if found else text
