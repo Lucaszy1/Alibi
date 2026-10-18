@@ -1,21 +1,33 @@
 ﻿"""Decoding pass: reveal payloads hidden behind base64, PowerShell -enc (UTF-16LE), hex, \\xNN
-escapes, and percent-encoding, so downstream tiers judge the real content, not the disguise.
+escapes, percent-encoding, gzip-in-base64, base32, and ROT13, so downstream tiers judge the real
+content, not the disguise.
 
-Pure and self-contained. reveal(text) returns the text with any decoded payloads appended; it only
-adds plausibly-decoded printable strings, so ordinary text passes through unchanged."""
+Pure and self-contained. reveal(text) returns the text with any decoded payloads appended. It only
+adds plausibly-decoded printable strings, and the noisier transforms (base32, ROT13) are gated to
+contribute only when they reveal a real indicator, so ordinary text passes through unchanged."""
 
 from __future__ import annotations
 
 import base64
 import binascii
+import codecs
+import gzip
 import re
 import urllib.parse
+import zlib
 
 _ENC_FLAG = re.compile(r"-e(?:nc|ncodedcommand)?\s+([A-Za-z0-9+/=]{16,})", re.I)
 _B64 = re.compile(r"[A-Za-z0-9+/]{16,}={0,2}")
+_B32 = re.compile(r"\b[A-Z2-7]{16,}={0,6}")
 _XHEX = re.compile(r"(?:\\x[0-9a-fA-F]{2}){3,}")
 _HEX = re.compile(r"\b((?:[0-9a-fA-F]{2}){8,})\b")
 _PCT = re.compile(r"(?:%[0-9a-fA-F]{2}){4,}")
+_INDICATORS = re.compile(
+    r"https?://|(?:[a-z0-9-]+\.)+(?:com|net|org|io|dev|app|ai|sh|co|ru|cn|xyz|top)\b|"
+    r"\b\d{1,3}(?:\.\d{1,3}){3}\b|invoke-webrequest|downloadstring|\biex\b|\bcurl\b|\bwget\b|"
+    r"powershell|cmd\.exe|-enc|certutil|bitsadmin",
+    re.I,
+)
 
 
 def _printable(b: bytes) -> str | None:
@@ -30,6 +42,27 @@ def _printable(b: bytes) -> str | None:
         return None
     ok = sum(1 for c in s if c.isprintable() or c.isspace())
     return s if ok / len(s) > 0.8 else None
+
+
+def _meaningful(s: str) -> bool:
+    """A decoded string worth surfacing from a noisy transform: it names a real indicator."""
+    return bool(_INDICATORS.search(s))
+
+
+def _from_bytes(raw: bytes) -> list[str]:
+    """Decoded forms of a decoded blob: its printable text and, when it is gzip, the inner payload."""
+    out: list[str] = []
+    s = _printable(raw)
+    if s and s.strip():
+        out.append(s)
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            g = _printable(gzip.decompress(raw))
+        except (OSError, EOFError, zlib.error):
+            g = None
+        if g and g.strip():
+            out.append(g)
+    return out
 
 
 def _resolve_inline(text: str) -> str:
@@ -59,6 +92,13 @@ def reveal(text: str) -> str:
         s = raw.decode("utf-16-le", "ignore").strip("\x00")
         if s:
             found.append(s)
+        if raw[:2] == b"\x1f\x8b":
+            try:
+                g = _printable(gzip.decompress(raw))
+            except (OSError, EOFError, zlib.error):
+                g = None
+            if g and g.strip():
+                found.append(g)
 
     for m in _B64.finditer(text):
         tok = m.group(0)
@@ -68,32 +108,40 @@ def reveal(text: str) -> str:
             raw = base64.b64decode(tok + "=" * (-len(tok) % 4))
         except (binascii.Error, ValueError):
             continue
-        s = _printable(raw)  # type: ignore[assignment]
-        if s and s.strip():
-            found.append(s)
+        found.extend(_from_bytes(raw))
+
+    for m in _B32.finditer(text):
+        t = m.group(0).rstrip("=")
+        try:
+            raw = base64.b32decode(t + "=" * (-len(t) % 8))
+        except (binascii.Error, ValueError):
+            continue
+        cand = _printable(raw)
+        if cand and cand.strip() and _meaningful(cand):
+            found.append(cand)
 
     for m in _XHEX.finditer(text):
         try:
             raw = bytes(int(h, 16) for h in re.findall(r"\\x([0-9a-fA-F]{2})", m.group(0)))
         except ValueError:
             continue
-        s = _printable(raw)  # type: ignore[assignment]
-        if s:
-            found.append(s)
+        found.extend(_from_bytes(raw))
 
     for m in _HEX.finditer(text):
         try:
             raw = binascii.unhexlify(m.group(1))
         except (binascii.Error, ValueError):
             continue
-        s = _printable(raw)  # type: ignore[assignment]
-        if s and s.strip():
-            found.append(s)
+        found.extend(_from_bytes(raw))
 
     if _PCT.search(text):
         dec = urllib.parse.unquote(text)
         if dec != text:
             found.append(dec)
+
+    rot = codecs.encode(text, "rot_13")
+    if rot != text and _meaningful(rot):
+        found.append(rot)
 
     resolved = _resolve_inline(text)
     if resolved != text:

@@ -14,9 +14,11 @@ Detection
   tier (done, partial) plus the anomaly tier (M-An) for the no-source case.
 - Taint and provenance are token-overlap based; values transformed in ways not modeled (encryption,
   compression, char-code math, multi-file splitting, unobserved channels) can break the link.
-- Decoding is single-layer: base64, PowerShell -enc, hex, percent, string-concat, cross-call env
-  vars. Not yet: nested encodings, base32, gzip, XOR, ROT13, .NET FromBase64 without -enc,
-  certutil/bitsadmin decode-to-file. Fix path: extend decode.py.
+- Decoding covers base64, PowerShell -enc, hex, percent, string-concat, cross-call env vars,
+  gzip-in-base64, base32, and ROT13 (noisy transforms gated on a real indicator). Intentionally
+  omitted: brute-force single-byte XOR (a 256-key sweep over attacker-controlled blobs is a DoS
+  vector for little gain) and certutil/bitsadmin decode-to-file (handled by taint's via-file path).
+  Still open: nested multi-layer encodings and .NET FromBase64 without -enc. Fix path: extend decode.py.
 - Policy tier keys off EDR MITRE tags, not command content, so an untagged technique is missed by
   policy (provenance/taint may still catch). Fix path: optional decoded-content policy scan.
 - Target extraction uses a fixed TLD allowlist; unusual or newer TLDs may not extract.
