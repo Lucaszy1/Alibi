@@ -128,8 +128,7 @@ class TaintIndex:
 
     def trace(self, target_call: ToolCall) -> TaintResult:
         """Whether target_call's input derives from untrusted content seen earlier in the session."""
-        tainted, tainted_paths, env, steps = self._snap.get(target_call_id := id(target_call), ({}, {}, {}, ()))
-        _ = target_call_id
+        tainted, tainted_paths, env, steps = self._snap.get(id(target_call), ({}, {}, {}, ()))
         low = reveal(_apply_env(_text(target_call), env)).lower()
         direct = next(((o, s, k) for key, (o, s, k) in tainted.items() if key in low), None)
         if direct:

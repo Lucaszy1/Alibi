@@ -50,8 +50,8 @@ Model, confidence, performance
   Ollama in CI). Fix path: a model-tier eval pass once a model is pinned. Deferred.
 - Confidence values are hand-tuned, not yet calibrated against corpus scores. Fix path: calibrate on
   an expanded corpus. Deferred.
-- trace_taint is memoized per call but still O(events) per distinct call; very large sessions will
-  be slow. Fix path: a precomputed per-session taint index.
+- Taint uses a precomputed per-session TaintIndex (one pass, snapshot before each call), so a call's
+  taint resolves in O(tokens in the call) and the session is O(events) overall, not O(events x calls). DONE.
 
 Privacy
 - Secret redaction in shared reports: DONE. redact.py masks credential values (keyed secrets, URL
