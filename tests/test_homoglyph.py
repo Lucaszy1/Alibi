@@ -20,3 +20,21 @@ def test_greek_homoglyph_folds():
 
 def test_bidi_control_stripped():
     assert _norm_text("\u202eevil.com\u202c") == "evil.com"
+
+
+def test_greek_upsilon_folds():
+    assert _norm_text("y\u03c5m.com") == "yum.com"
+
+
+def test_greek_uppercase_zeta_folds():
+    assert _norm_text("\u0396ebra.com") == "zebra.com"
+
+
+def test_armenian_homoglyph_folds():
+    # Armenian o (U+0585) and n (U+0578)
+    assert _norm_text("\u0585\u0578.com") == "on.com"
+
+
+def test_extended_latin_alpha_folds():
+    # Latin small alpha (U+0251), distinct from ASCII 'a' under NFKC
+    assert _norm_text("\u0251pple.com") == "apple.com"

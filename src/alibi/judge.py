@@ -89,19 +89,32 @@ _PASTED_BLOCK_RE = re.compile(r"<pasted_content[^>]*>.*?</pasted_content>", re.I
 _ZW_RE = re.compile("[\u200b-\u200f\u202a-\u202e\u2060\ufeff]")
 
 
-# Common Cyrillic/Greek homoglyphs folded to their Latin look-alikes. A curated subset (the letters
-# actually abused in look-alike domains and injected words), not the full Unicode confusables table.
+# Homoglyphs folded to Latin look-alikes across Cyrillic, Greek, Armenian and extended Latin. A wide
+# curated subset of letters abused in look-alike domains and injections, not the full Unicode table.
 _CONFUSABLES = str.maketrans({
-    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x",
-    "у": "y", "і": "i", "ј": "j", "ѕ": "s", "к": "k", "м": "m",
-    "н": "h", "т": "t", "в": "b", "г": "r",
-    "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "Х": "X",
-    "У": "Y", "І": "I", "Ѕ": "S", "К": "K", "М": "M", "Н": "H",
-    "Т": "T", "В": "B",
-    "ο": "o", "α": "a", "ρ": "p", "ε": "e", "κ": "k", "μ": "m",
-    "ν": "v", "τ": "t", "χ": "x", "ι": "i",
-    "Ο": "O", "Α": "A", "Ρ": "P", "Ε": "E", "Κ": "K", "Μ": "M",
-    "Ν": "N", "Τ": "T", "Χ": "X", "Ι": "I",
+    # Cyrillic lowercase -> Latin
+    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c",
+    "\u0445": "x", "\u0443": "y", "\u0456": "i", "\u0458": "j", "\u0455": "s",
+    "\u043a": "k", "\u043c": "m", "\u043d": "h", "\u0442": "t", "\u0432": "b",
+    "\u0433": "r", "\u0501": "d", "\u051b": "q", "\u051d": "w", "\u0475": "v",
+    "\u04cf": "l",
+    # Cyrillic uppercase -> Latin
+    "\u0410": "A", "\u0415": "E", "\u041e": "O", "\u0420": "P", "\u0421": "C",
+    "\u0425": "X", "\u0423": "Y", "\u0406": "I", "\u0405": "S", "\u041a": "K",
+    "\u041c": "M", "\u041d": "H", "\u0422": "T", "\u0412": "B", "\u0408": "J",
+    "\u051a": "Q", "\u051c": "W", "\u0474": "V", "\u04c0": "I",
+    # Greek lowercase -> Latin
+    "\u03bf": "o", "\u03b1": "a", "\u03c1": "p", "\u03b5": "e", "\u03ba": "k",
+    "\u03bc": "m", "\u03bd": "v", "\u03c4": "t", "\u03c7": "x", "\u03b9": "i",
+    "\u03c5": "u", "\u03b3": "y", "\u03f2": "c",
+    # Greek uppercase -> Latin
+    "\u039f": "O", "\u0391": "A", "\u03a1": "P", "\u0395": "E", "\u039a": "K",
+    "\u039c": "M", "\u039d": "N", "\u03a4": "T", "\u03a7": "X", "\u0399": "I",
+    "\u0392": "B", "\u0397": "H", "\u0396": "Z", "\u03a5": "Y",
+    # Armenian -> Latin
+    "\u0585": "o", "\u0578": "n", "\u057d": "u",
+    # Extended Latin look-alikes (NFKC keeps these distinct from ASCII)
+    "\u0251": "a", "\u0131": "i", "\u0261": "g",
 })
 
 
