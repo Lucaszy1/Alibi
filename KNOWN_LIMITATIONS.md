@@ -49,8 +49,9 @@ Model, confidence, performance
   earns its place (benchmark/REPORT.md). DONE.
 - Model-tier accuracy is still unmeasured: the benchmark runs the deterministic judge only (no local
   Ollama in CI). Fix path: a model-tier eval pass once a model is pinned. Deferred.
-- Confidence values are hand-tuned, not yet calibrated against corpus scores. Fix path: calibrate on
-  an expanded corpus. Deferred.
+- Confidence is now measured (alibi bench --calibration: reliability by confidence band), which shows
+  the values are not yet probability-calibrated (a high-confidence mis-attribution exists on the
+  laundered case). Full re-tuning needs a larger corpus. Measured; re-tuning deferred.
 - Taint uses a precomputed per-session TaintIndex (one pass, snapshot before each call), so a call's
   taint resolves in O(tokens in the call) and the session is O(events) overall, not O(events x calls). DONE.
 

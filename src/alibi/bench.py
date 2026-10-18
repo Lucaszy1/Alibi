@@ -246,3 +246,49 @@ def comparison_report(corpus) -> str:
             "loses hijack attribution; removing policy opens a silent allow; the keyword and alert-level "
             "baselines over-flag user-requested dangerous actions."]
     return "\n".join(out) + "\n"
+
+
+def _case_verdict(case):
+    from alibi.alerts import load_alerts
+    from alibi.transcript import load_transcript
+    from alibi.verdict import Disposition
+    events = load_transcript(str(case.transcript))
+    alerts = load_alerts(str(case.alerts))
+    verdicts = _default_judge(events).judge_all(alerts)
+    if not verdicts:
+        return "NONE", 0.0
+    v = verdicts[0]
+    label = label_of(v.verdict) if (v.disposition is Disposition.VERDICT and v.verdict is not None) else "NONE"
+    return label, v.confidence
+
+
+def calibration(corpus, bins=(0.0, 0.6, 0.75, 0.9, 1.0001)) -> list:
+    """Reliability by confidence band: for each band, how many cases fell in it and how often the
+    judge was right. On a small corpus the bands are sparse; it is a sanity check, not a calibrated
+    probability, and it will expose a confident wrong prediction rather than hide it."""
+    rows = []
+    for c in corpus:
+        label, conf = _case_verdict(c)
+        rows.append((conf, label == c.expected))
+    out = []
+    for lo, hi in zip(bins, bins[1:]):
+        inb = [(conf, ok) for conf, ok in rows if lo <= conf < hi]
+        n = len(inb)
+        out.append({
+            "lo": lo, "hi": hi, "n": n,
+            "accuracy": round(sum(1 for _, ok in inb if ok) / n, 3) if n else 0.0,
+            "mean_confidence": round(sum(conf for conf, _ in inb) / n, 3) if n else 0.0,
+        })
+    return out
+
+
+def calibration_report(corpus) -> str:
+    rows = calibration(corpus)
+    out = ["# Alibi confidence calibration", "",
+           f"Reliability by confidence band over {len(corpus)} cases (deterministic judge). The corpus",
+           "is small, so bands are sparse; read this as a sanity check, not a calibrated probability.", "",
+           "| confidence band | cases | accuracy | mean confidence |",
+           "| --- | ---: | ---: | ---: |"]
+    for r in rows:
+        out.append(f"| [{r['lo']:.2f}, {min(r['hi'], 1.0):.2f}] | {r['n']} | {r['accuracy']:.3f} | {r['mean_confidence']:.3f} |")
+    return "\n".join(out) + "\n"

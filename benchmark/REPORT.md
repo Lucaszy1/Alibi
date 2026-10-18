@@ -11,3 +11,15 @@
 | alert-level-baseline | 0.440 | 0.361 | 0 | 6 | 13/13 |
 
 Only the full judge reaches zero silent-allows and zero false-flags. Removing provenance loses hijack attribution; removing policy opens a silent allow; the keyword and alert-level baselines over-flag user-requested dangerous actions.
+
+# Alibi confidence calibration
+
+Reliability by confidence band over 25 cases (deterministic judge). The corpus
+is small, so bands are sparse; read this as a sanity check, not a calibrated probability.
+
+| confidence band | cases | accuracy | mean confidence |
+| --- | ---: | ---: | ---: |
+| [0.00, 0.60] | 2 | 1.000 | 0.533 |
+| [0.60, 0.75] | 2 | 1.000 | 0.679 |
+| [0.75, 0.90] | 21 | 0.952 | 0.843 |
+| [0.90, 1.00] | 0 | 0.000 | 0.000 |

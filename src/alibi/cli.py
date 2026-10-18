@@ -284,6 +284,7 @@ def _build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--report", type=Path, default=None, metavar="FILE",
                        help="also write a Markdown metrics report to FILE")
     bench.add_argument("--json", action="store_true", help="emit per-system metrics as JSON Lines")
+    bench.add_argument("--calibration", action="store_true", help="also report reliability by confidence band")
     return parser
 
 
@@ -517,19 +518,22 @@ def _undo(args, out, err) -> int:
 def _bench(args, out, err) -> int:
     """Run the benchmark corpus through the judge, its ablations and the baselines; print the
     comparison table, optionally write a Markdown report, and with --json emit per-system rows."""
-    from alibi.bench import comparison_report, comparison_rows, load_corpus
+    from alibi.bench import calibration_report, comparison_report, comparison_rows, load_corpus
 
     if not (args.corpus / "cases.jsonl").is_file():
         print(f"alibi: no corpus at {args.corpus} (expected cases.jsonl)", file=err)
         return 2
     corpus = load_corpus(args.corpus)
+    body = comparison_report(corpus)
+    if getattr(args, "calibration", False):
+        body = body + "\n" + calibration_report(corpus)
     if args.json:
         for row in comparison_rows(corpus):
             out.write(json.dumps(row) + "\n")
     else:
-        out.write(comparison_report(corpus))
+        out.write(body)
     if args.report:
-        args.report.write_text(comparison_report(corpus), encoding="utf-8")
+        args.report.write_text(body, encoding="utf-8")
         print(f"alibi: wrote {args.report}", file=err)
     return 0
 
