@@ -8,9 +8,10 @@ are always side-effect free."""
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
 from alibi.verdict import Disposition, Verdict, VerdictKind
@@ -175,8 +176,9 @@ def _propose(v: Verdict, os_name: str) -> Remediation:
 
     if "files rewritten" in reason:
         return Remediation(v, "restore_files",
-                           "Restore the rewritten files from version control (git restore) or a backup.",
-                           command="git restore .", reversible=True, manual=False)
+                           "Restore the rewritten files from version control (git restore) or a backup. "
+                           "This discards the agent's edits and cannot be undone by Alibi.",
+                           command="git restore .", reversible=False, manual=False)
 
     is_cred = bool(_CRED_CMD_RE.search(cmd))
     is_exfil = ("targets host" in reason or "exfiltrat" in reason
@@ -341,4 +343,80 @@ def apply_remediations(remediations, approver: Callable, executor: Callable | No
             continue
         executor(r)
         results.append((r, "applied"))
+    return results
+
+
+@dataclass(frozen=True)
+class UndoStep:
+    action: str
+    description: str
+    command: str | None
+    manual: bool
+
+
+def _inverse(rem, os_name):
+    """The exact inverse of one applied, reversible containment action, or None when it should not
+    be auto-undone. Deletions of persistence are never undone here: reversing them would reinstate
+    the attacker's autostart."""
+    if rem.action == "quarantine_file":
+        paths = re.findall(r'"([^"]*)"', rem.command or "")
+        if len(paths) == 2:
+            mv = "move" if os_name == "windows" else "mv"
+            return UndoStep("restore_quarantined_file",
+                            f"Move the quarantined file back to {paths[0]}.",
+                            f'{mv} "{paths[1]}" "{paths[0]}"', manual=False)
+        return None
+    if rem.action == "block_ip":
+        cmd = rem.command or ""
+        if cmd.startswith("netsh"):
+            return UndoStep("unblock_ip",
+                            f"Remove the firewall rule blocking {rem.target}.",
+                            f'netsh advfirewall firewall delete rule name="Alibi block {rem.target}"',
+                            manual=False)
+        return UndoStep("unblock_ip",
+                        f"Remove the firewall DROP rule for {rem.target}.",
+                        cmd.replace(" -A OUTPUT ", " -D OUTPUT ", 1), manual=False)
+    if rem.action == "block_host":
+        return UndoStep("unblock_host",
+                        f"Remove the '0.0.0.0 {rem.target}' line from the hosts file by hand; "
+                        "Alibi will not auto-edit the hosts file to undo a block.",
+                        None, manual=True)
+    return None
+
+
+def rollback_bundle(results, target_os: str | None = None) -> list:
+    """Undo steps for the reversals Alibi actually applied (status 'applied'). A dry run changes
+    nothing, so it yields no undo steps. Pure; builds the plan, runs nothing."""
+    os_name = target_os or _default_os()
+    steps = []
+    for rem, status in results:
+        if status != "applied":
+            continue
+        step = _inverse(rem, os_name)
+        if step is not None:
+            steps.append(step)
+    return steps
+
+
+def bundle_to_json(steps) -> str:
+    """Serialize an undo bundle so an operator can keep it and revert in a later session."""
+    return json.dumps([asdict(s) for s in steps], indent=2)
+
+
+def apply_undo(steps, approver, executor=None) -> list:
+    """Run undo steps under the same consent gate as apply_remediations: a manual step or one with
+    no command is never executed; others run only on an explicit yes AND a real executor."""
+    results = []
+    for s in steps:
+        if s.manual or s.command is None:
+            results.append((s, "manual"))
+            continue
+        if not approver(s):
+            results.append((s, "declined"))
+            continue
+        if executor is None:
+            results.append((s, "approved-dryrun"))
+            continue
+        executor(s)
+        results.append((s, "applied"))
     return results
