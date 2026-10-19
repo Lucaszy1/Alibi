@@ -40,7 +40,7 @@ input cannot cause catastrophic backtracking or memory blow-up, and a fuzz suite
 - **The model tier is strictly non-exonerating.** It may escalate a verdict but can never clear one to
   JUSTIFIED, so a prompt injection in the untrusted content it reads cannot talk the judge into
   allowing an action. By default the model host must be loopback (`--allow-remote-model` to override).
-- **Evasion is normalized away.** Zero-width, bidi-control, fullwidth, and common Cyrillic/Greek
+- **Evasion is normalized away.** Zero-width, bidi-control, fullwidth, and common look-alike
   homoglyphs are canonicalized before matching.
 
 ## Fail-safe posture
@@ -56,8 +56,8 @@ tool call runs.
   the final gate.
 - A model endpoint the operator points at is trusted to that extent (hence the loopback default).
 - A compromised host, or a forged session transcript, is outside the trust boundary.
-- Confusables folding is a curated subset; instruction-like heuristics are English-only (provenance and
-  taint are language-independent).
+- Heuristic layers (normalization, instruction cues) have finite coverage and are defense-in-depth;
+  the primary provenance and taint analysis is language- and signature-independent.
 
 ## Reporting
 

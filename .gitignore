@@ -6,3 +6,6 @@ model_scan.jsonl
 __pycache__/
 .pytest_cache/
 *.pyc
+
+CLAUDE.md
+*.internal.md
