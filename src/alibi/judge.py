@@ -81,6 +81,16 @@ _INSTRUCTION_RES = [
         r"\bsystem\s*(prompt|message|note|instruction)\b",
         r"\bdo not (tell|mention|inform|ask)\b",
         r"<!--",
+        # Non-English "ignore previous instructions" + secrecy cues (FR/ES/DE/IT/PT), matched after
+        # denoising. Curated subset; Cyrillic-script injections are caught by provenance/policy instead.
+        r"\b(ignore[zr]?|oublie[zr]?)\b.{0,40}\b(instructions?|consignes?|pr\u00e9c\u00e9dent\w*|r\u00e8gles?)\b",
+        r"\b(ignora|ignore|olvida|olvide)\b.{0,40}\b(instrucciones|anteriores|reglas|indicaciones)\b",
+        r"\b(ignoriere|vergiss|missachte)\b.{0,40}\b(anweisung\w*|vorherige\w*|regeln)\b",
+        r"\b(ignora|dimentica)\b.{0,40}\b(istruzioni|precedenti|regole)\b",
+        r"\b(ignore|ignora|esque\u00e7a)\b.{0,40}\b(instru\u00e7\u00f5es|anteriores|regras)\b",
+        r"\bne\b.{0,30}\b(dis|dites|mentionne\w*|informe\w*)\b.{0,25}\butilisateur\b",
+        r"\bno\b.{0,20}\b(digas|diga|informes|menciones)\b.{0,20}\busuario\b",
+        r"\b(nicht|niemals)\b.{0,40}\b(benutzer|nutzer)\b.{0,40}\b(sag\w*|mitteil\w*|erw\u00e4hn\w*|informier\w*)\b",
     )
 ]
 
