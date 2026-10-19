@@ -217,6 +217,8 @@ def _add_common_args(sp) -> None:
     sp.add_argument("--color", choices=("auto", "always", "never"), default="auto")
     sp.add_argument("--allow", type=Path, default=None, metavar="FILE",
                     help="allowlist file of sanctioned hosts/paths/commands that downgrade a flag to JUSTIFIED")
+    sp.add_argument("--policy", type=Path, default=None, metavar="FILE",
+                    help="YAML policy file: tune category severity (strict/escalate/off) and the allowlist")
     sp.add_argument("--ollama-host", default="http://127.0.0.1:11434", metavar="URL",
                     help="Ollama host for the model tier (default http://127.0.0.1:11434)")
     sp.add_argument("--max-model-calls", type=int, default=50, metavar="N",
@@ -613,6 +615,25 @@ def main(argv: list[str] | None = None, out: TextIO | None = None, err: TextIO |
     if getattr(args, "allow", None):
         from alibi.allowlist import load_allowlist
         judge.allowlist = load_allowlist(args.allow)
+    if getattr(args, "policy", None):
+        from alibi.policy import load_policy
+        try:
+            pol = load_policy(args.policy)
+        except (OSError, ValueError) as e:
+            print(f"alibi: invalid --policy file: {e}", file=err)
+            return 2
+        judge.policy = pol
+        if not pol.allowlist.empty:
+            if judge.allowlist is None:
+                judge.allowlist = pol.allowlist
+            else:
+                from alibi.allowlist import Allowlist
+                a = judge.allowlist
+                judge.allowlist = Allowlist(
+                    a.hosts | pol.allowlist.hosts,
+                    a.paths | pol.allowlist.paths,
+                    a.commands | pol.allowlist.commands,
+                )
     verdicts = judge.judge_all(alerts)
     if getattr(args, "state", None):
         from alibi.state import record_run

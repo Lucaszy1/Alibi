@@ -1,0 +1,26 @@
+﻿# Example Alibi policy. Use it with:
+#   alibi scan results.csv transcript.jsonl --policy alibi-policy.example.yaml
+#
+# categories: how strictly Alibi treats each action category.
+#   strict   -> an unrequested action in this category is UNJUSTIFIED (flagged)
+#   escalate -> an unrequested action is UNKNOWN (sent to human review)
+#   off      -> ignore this category entirely
+# Any category you leave out keeps Alibi's built-in default.
+categories:
+  exfiltration: strict
+  destruction: strict
+  persistence: strict
+  credential_access: strict
+  defense_evasion: strict
+  command_control: escalate
+  stealth: escalate
+  collection: escalate      # relax clipboard/screenshot from strict to review-only
+
+# allow: sanctioned hosts, paths, and commands that downgrade a flag to JUSTIFIED.
+# This file is trusted and user-controlled; it is never read from the analyzed session.
+allow:
+  hosts:
+    - updates.vendor.com
+  paths:
+    - "C:/ProgramData/CorpAgent/*"
+  commands: []
