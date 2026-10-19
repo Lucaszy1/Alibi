@@ -438,6 +438,14 @@ _CONTENT_SIGS = (
 _CATS_BY_NAME = {c.name: c for c in POLICY_CATEGORIES}
 
 
+def effective_level(policy: Any, category: Any) -> Any:
+    """The level a category has under an optional user policy (None means disabled). Falls back to
+    the category's built-in level when no policy overrides it, so default behaviour is unchanged."""
+    if policy is None:
+        return category.level
+    return policy.levels.get(category.name, category.level)
+
+
 def _content_policy_hits(action_text: str, prompts: list[UserPrompt], existing: list[PolicyHit]) -> list[PolicyHit]:
     """Policy hits derived from the decoded command content for categories the alert tags missed.
     The same mentioned-check applies, so a user-requested dangerous command is still cleared."""
@@ -642,6 +650,7 @@ class Judge:
     workspace_roots: tuple[str, ...] = ()
     allowlist: Any = None
     disable_policy: bool = False
+    policy: Any = None
     _tool_names: dict[str, str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -799,10 +808,10 @@ class Judge:
             return v, ctx(v)
 
         explicit = prov.phrase_match is not None
-        strict_unmet = [h for h in hits if h.category.level is PolicyLevel.STRICT and not h.mentioned and not explicit]
+        strict_unmet = [h for h in hits if effective_level(self.policy, h.category) is PolicyLevel.STRICT and not h.mentioned and not explicit]
         escalate_unmet = [
             h for h in hits
-            if h.category.level is PolicyLevel.ESCALATE and not h.mentioned and not explicit and prov.target_match is None
+            if effective_level(self.policy, h.category) is PolicyLevel.ESCALATE and not h.mentioned and not explicit and prov.target_match is None
         ]
 
         # Tier 2: hijack. Targets the user never named, found in untrusted content since the
