@@ -7,6 +7,19 @@ human-approved reversal, and can run inline as a hook that blocks a hijack befor
 provenance-aware, not signature-based: it asks where an instruction came from, so a novel technique
 it has never seen is still caught when it traces to untrusted input.
 
+## Why Alibi exists
+
+AI coding agents now run shell commands, edit files, and reach the network on a developer's behalf.
+That autonomy is also an attack surface: an agent that reads attacker-controlled content, a web page,
+a dependency file, a README, can be steered by *indirect prompt injection* into harmful actions, and
+endpoint security sees the action but cannot tell whether the user asked for it or an injected
+instruction did. Signature tools flag the command; none of them judge where the instruction came
+from. Alibi fills that gap: it adjudicates each flagged action by its provenance, so a developer who
+asked for a scheduled build and an attacker who injected a persistence command are no longer
+indistinguishable.
+
+<!-- ORIGIN: your personal "why" goes here, the real moment that made you build this. -->
+
 ## Verdicts
 
 | Verdict       | Meaning                                                                 |
@@ -33,9 +46,12 @@ then judged in tiers, cheapest first:
   hijack, but it can never clear a deterministic flag.
 
 A decoding pass runs before the tiers, so payloads hidden behind base64, PowerShell `-enc`, hex,
-percent-encoding, string concatenation, or shell variables are judged on their real content.
+percent-encoding, string concatenation, or shell variables are judged on their real content. Text is also normalized before matching:
+invisible and bidirectional-control characters stripped, homoglyphs folded, and leetspeak or
+spaced-out phrasing collapsed, so disguised injection cues still match.
 Flagged actions on one host within a window are correlated into a single incident. A user-controlled
-allowlist can sanction known-good hosts, paths, or commands. Sessions from other agents can be
+allowlist can sanction known-good hosts, paths, or commands, and a YAML policy file (`--policy`) tunes
+how strictly each category is treated (strict / escalate / off). Sessions from other agents can be
 ingested through a neutral role/kind JSONL format.
 
 ## Usage
@@ -46,6 +62,7 @@ alibi scan <hayabusa-results.csv> [transcript.jsonl]
 alibi scan results.csv --json --all --min-confidence 0.7
 alibi scan results.csv --model             # also adjudicate UNKNOWNs inline (local Ollama)
 alibi scan results.csv --allow allow.txt   # sanction known-good hosts/paths/commands
+alibi scan results.csv --policy policy.yaml # tune category severity + allowlist (see examples/)
 ```
 
 ### adjudicate (background model pass)
@@ -96,8 +113,9 @@ Wire it in `.claude/settings.json`:
 Alibi treats everything it ingests as hostile. A reversal with shell-unsafe or truncated target
 characters is never auto-run; the judge model can never override a deterministic flag or be steered
 by session text; oversized input is refused instead of exhausting memory; the parsers and hot
-regexes are fuzzed against malformed and random input. See `KNOWN_LIMITATIONS.md` for the honest
-edges and how each is tracked.
+regexes are fuzzed against malformed and random input. Remediation can be forced shell-free
+(`--apply --no-shell`), and the optional model host is loopback-only by default. The full trust model
+is in `SECURITY.md`; `KNOWN_LIMITATIONS.md` lists the honest edges and how each is tracked.
 
 ## Layout
 ```
@@ -129,7 +147,11 @@ deterministic tiers.
 - `allowlist.py`: user-sanctioned hosts, paths, and commands that downgrade a flag.
 - `inline.py`: real-time assessment of a proposed call (ALLOW / WARN / BLOCK).
 - `remediate.py`: propose reversals and run them only behind a per-action approval gate.
-- `cli.py`: the scan / adjudicate / remediate / incidents / hook commands.
+- `policy.py`: a YAML policy that tunes category severity (strict / escalate / off) and the allowlist.
+- `mcp_server.py`: a dependency-free MCP server exposing the guardrail to any agent.
+- `bench.py`: the benchmark, ablations, baselines, and calibration.
+- `redact.py` / `state.py`: report secret-redaction and durable run history.
+- `cli.py`: scan / adjudicate / remediate / incidents / report / hook / undo / history / bench / mcp.
 
 ## Known limitations
 

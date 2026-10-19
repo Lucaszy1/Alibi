@@ -4,11 +4,24 @@ build-backend = "hatchling.build"
 
 [project]
 name = "alibi"
-version = "0.1.0"
+version = "1.0.0"
 description = "Judges whether endpoint-security alerts from AI coding agents were justified by the user's request."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Luca Szyszkowski" }]
+keywords = ["security", "ai-agents", "prompt-injection", "provenance", "edr", "llm-security"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
 dependencies = ["pyyaml>=6"]
+
+[project.urls]
+Repository = "https://github.com/Lucaszy1/Alibi"
 
 [project.scripts]
 alibi = "alibi.cli:main"
