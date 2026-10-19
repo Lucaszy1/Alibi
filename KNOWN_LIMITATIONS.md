@@ -49,12 +49,24 @@ it. The shipped code is tested (356 tests, ruff + mypy clean).
   of real-world accuracy. A larger, independently sourced corpus and a model-tier run on real hardware
   are required before any performance claim in a paper.
 
+## No required third-party software (by design)
+
+Alibi runs on Python with a minimal footprint and does not require its users to install extra parsers,
+services, or agents. It consumes the JSON/CSV that endpoint tools and SIEMs already export, so there is
+nothing extra to stand up in order to use it. Two consequences follow:
+
+- Raw binary formats that would need a third-party parser (for example Windows EVTX) are intentionally
+  out of scope. Export from your existing tooling instead. This is a deliberate choice to avoid
+  imposing a dependency on every user, not a capability gap.
+- The optional local model tier is the only component that talks to an external service, and it is off
+  by default. Every deterministic tier works with no third-party software at all.
+
 ## Status and future work
 
 - Shipped: ingestion (neutral and common vendor JSON), allowlists, anomaly tier, explainability,
   remediation depth with rollback, inline guardrail and MCP server, benchmark with ablations and
   calibration.
-- Deferred (convenience, not correctness): binary EVTX / Event Log parsing and some host-feed formats.
+- Deferred (convenience, not correctness): some additional host-feed formats.
 - Future: policy layer, packaging and docs, an independent public benchmark, and the paper.
 
 ## Commitment
