@@ -137,6 +137,23 @@ def _denoise(text: str) -> str:
     return t.translate(_CONFUSABLES)
 
 
+# Leetspeak / spacing evasion, folded for the instruction-cue scan ONLY (never for host, command, or
+# taint extraction), so a disguised injection phrase like "1gn0re" or "i g n o r e" still matches while
+# the flag-producing extraction stays byte-exact and cannot be pushed to a false positive.
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"})
+_SPACED_RE = re.compile(r"(?<![A-Za-z])(?:[A-Za-z][ .\-_*|]){2,}[A-Za-z](?![A-Za-z])")
+
+
+def _deleet(text: str) -> str:
+    """A leetspeak/spacing-normalised view of the instruction window, for the cue scan only. Folds
+    common letter-for-symbol substitutions and collapses runs of single letters separated by one
+    character ("i g n o r e" -> "ignore"). Never applied to host/command/taint extraction, so it can
+    only strengthen cue detection, never produce a flag on its own."""
+    folded = text.translate(_LEET)
+    collapsed = _SPACED_RE.sub(lambda m: re.sub(r"[ .\-_*|]", "", m.group(0)), folded)
+    return collapsed.lower()
+
+
 def _user_intent(text: str) -> str:
     """User text with pasted/attached blocks removed: pasted content may be attacker-controlled (a
     malicious doc the user pasted), so it must not count as the user's request when justifying an
@@ -511,10 +528,11 @@ def trace_provenance(
             # Locate in the raw text for a readable excerpt (normalisation shifts offsets a little).
             raw_idx = max(0, min(len(raw) - 1, idx))
             window = _denoise(raw[max(0, raw_idx - INSTRUCTION_RADIUS): raw_idx + INSTRUCTION_RADIUS])
+            window_leet = _deleet(window)
             hits.append(
                 UntrustedHit(
                     target, result, tool_names.get(result.tool_use_id), _excerpt(_clean(raw), _clean_index(raw, raw_idx)),
-                    any(r.search(window) for r in _INSTRUCTION_RES),
+                    any(r.search(window) or r.search(window_leet) for r in _INSTRUCTION_RES),
                 )
             )
 
