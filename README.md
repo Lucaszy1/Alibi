@@ -11,6 +11,10 @@ human-approved reversal, and can run inline as a hook that blocks a hijack befor
 provenance-aware, not signature-based: it asks where an instruction came from, so a novel technique
 it has never seen is still caught when it traces to untrusted input.
 
+![Alibi catching a prompt-injection hijack and clearing a benign session](docs/alibi-demo.gif)
+
+*A simplified demo: the same endpoint alerts across two sessions. Alibi traces each flagged action back to its source. Real detection covers a much wider range of attacks than shown here.*
+
 ## Why Alibi exists
 
 Over the past year, AI coding agents have taken real, damaging actions their users never authorized.
