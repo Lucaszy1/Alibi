@@ -9,16 +9,25 @@ it has never seen is still caught when it traces to untrusted input.
 
 ## Why Alibi exists
 
-AI coding agents now run shell commands, edit files, and reach the network on a developer's behalf.
-That autonomy is also an attack surface: an agent that reads attacker-controlled content, a web page,
-a dependency file, a README, can be steered by *indirect prompt injection* into harmful actions, and
-endpoint security sees the action but cannot tell whether the user asked for it or an injected
-instruction did. Signature tools flag the command; none of them judge where the instruction came
-from. Alibi fills that gap: it adjudicates each flagged action by its provenance, so a developer who
-asked for a scheduled build and an attacker who injected a persistence command are no longer
-indistinguishable.
+Over the past year, AI coding agents have taken real, damaging actions their users never authorized.
+[Replit's agent wiped a production database](https://www.eweek.com/news/replit-ai-coding-assistant-failure/)
+during a code freeze. [A compromised Amazon Q ran file-wiping commands](https://www.bleepingcomputer.com/news/security/amazon-ai-coding-agent-hacked-to-inject-data-wiping-commands/).
+[Injected content drove a Semantic Kernel agent to execute code on its host](https://www.microsoft.com/en-us/security/blog/2026/05/07/prompts-become-shells-rce-vulnerabilities-ai-agent-frameworks/).
+In every case, endpoint security could see the action but had no way to judge it against what the
+user actually asked for.
 
-<!-- ORIGIN: your personal "why" goes here, the real moment that made you build this. -->
+I built Alibi to close that gap, so incidents like these become preventable instead of cautionary
+tales. Plenty of tools can flag a dangerous command, but none of them ask the question that actually
+matters for an agent: did the user request this, or did something injected into the session? Alibi
+judges each flagged action by where its instruction came from, connecting what the endpoint sees to
+what the user asked. That link, between an agent's action and the intent behind it, is what hasn't
+been built before.
+
+## The name
+
+An alibi is proof that accounts for what you did. Alibi asks the same of every flagged agent action:
+can it be accounted for by what the user actually requested? An action with no alibi is one worth
+stopping.
 
 ## Verdicts
 
