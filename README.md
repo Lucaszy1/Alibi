@@ -1,7 +1,7 @@
 # Alibi
 
 ![CI](https://github.com/Lucaszy1/Alibi/actions/workflows/tests.yml/badge.svg)
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
 
 Alibi reads an AI coding agent's session transcript alongside the endpoint-security alerts it
