@@ -1,5 +1,9 @@
 # Alibi
 
+![CI](https://github.com/Lucaszy1/Alibi/actions/workflows/tests.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+
 Alibi reads an AI coding agent's session transcript alongside the endpoint-security alerts it
 triggered and decides whether each flagged action was the user's intent or an injected attack. It
 follows untrusted data through the session, correlates the steps of one intrusion, proposes a
