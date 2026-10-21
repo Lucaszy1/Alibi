@@ -1,0 +1,4 @@
+title: Alibi
+description: Provenance-aware adjudication for AI coding agents. Did the user ask for this, or did an attacker inject it?
+theme: jekyll-theme-cayman
+show_downloads: false
