@@ -71,6 +71,14 @@ allowlist can sanction known-good hosts, paths, or commands, and a YAML policy f
 how strictly each category is treated (strict / escalate / off). Sessions from other agents can be
 ingested through a neutral role/kind JSONL format.
 
+## Install
+
+```
+pip install alibi-guard
+```
+
+Python 3.11+. The installed command is `alibi` (the PyPI distribution is named `alibi-guard` because `alibi` was already taken). The optional model tier (`--model`, `adjudicate`) needs a local [Ollama](https://ollama.com) server; without it, everything runs on the deterministic tiers.
+
 ## Usage
 
 ### scan (fast, deterministic)
