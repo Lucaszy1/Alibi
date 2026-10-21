@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "alibi"
+name = "alibi-guard"
 version = "1.0.0"
 description = "Judges whether endpoint-security alerts from AI coding agents were justified by the user's request."
 readme = "README.md"
